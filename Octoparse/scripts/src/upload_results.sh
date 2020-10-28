@@ -1,6 +1,6 @@
 #!/bin/bash
 
-p_results_dir=../results/processed/test
+p_results_dir=../results/processed/small
 
 files=`ls $p_results_dir`
 awk -F',' ' { print $3 "," $5 "," $6 } ' ../sql/keywords.csv > tmp_keywords.txt
@@ -19,13 +19,16 @@ do
 
     # find assetId & keywordId
     # For dups, need to find the keyword as the end of the run_token
-    line=`grep "$keyword\""'$' ../sql/keywords.csv`
+    line=`grep "=$keyword\""'$' ../sql/keywords.csv`
     if [[ $line == "" ]]
     then
         # For dups, need to find the keyword as the end of the run_token (detect if there is "&catalog" in start url)
 	line=`grep "$keyword"'&' ../sql/keywords.csv`
-    # else
-    #	line=`grep "$keyword"'\/' ../sql/keywords.csv`
+
+	if [[ $line == "" ]]
+	then
+    		line=`grep "$keyword"'\/' ../sql/keywords.csv`
+	fi
     fi
     assetId=`echo $line | awk -F',' ' { print $3 } '`
     keywordId=`echo $line | awk -F',' ' { print $5 } '`
