@@ -1,6 +1,6 @@
 #!/bin/bash
 
-p_results_dir=../results/processed/medium
+p_results_dir=../results/processed/DHGate
 
 files=`ls $p_results_dir`
 awk -F',' ' { print $3 "," $5 "," $6 } ' ../sql/keywords.csv > tmp_keywords.txt
@@ -10,7 +10,8 @@ do
     # need to allow for '.' in the file name (e.g., l.a.girl)- so matching to .csv
     run_token=`echo $file | sed 's/.csv//'`
     # keyword is last part of the filename itself. Please note, keyword may contain '-' in it. Need to capture everything AFTER the 3rd field. 
-    keyword=`echo $run_token | awk -F'-' ' { print substr($0,index($0,$3)) } '`
+    keyword=`cat $p_results_dir/$file | sed -e 's/"[^"]*"//g' | awk -F',' ' { print $8 $9 }' | uniq | grep -v searchkey`
+    #keyword=`echo $run_token | awk -F'-' ' { print substr($0,index($0,$3)) } '`
 
     ################
     # Upload results to S3 bucket
