@@ -17,15 +17,18 @@ timestamp = int(str(time.time()).replace('.', ''))
 def main(argv):
    results_file = ''
    p_results_dir = ''
+   platform = ''
    try:
-      opts, args = getopt.getopt(argv,"hi:o:",["results_file=","p_results_dir="])
+      opts, args = getopt.getopt(argv,"hp:i:o:",["platform=","results_file=","p_results_dir="])
    except getopt.GetoptError:
-      print('parse_results.py -i <raw inputfile> -o <output directory>')
+      print('parse_results.py -p <platform> -i <raw inputfile> -o <output directory>')
       sys.exit(2)
    for opt, arg in opts:
       if opt == '-h':
          print('parse_results.py -i <raw inputfile> -o <output directory>')
          sys.exit()
+      elif opt in ("-p", "--platform"):
+         platform = arg
       elif opt in ("-i", "--results_file"):
          results_file = arg
       elif opt in ("-o", "--processed_results_dir"):
@@ -34,15 +37,16 @@ def main(argv):
          if p_results_dir.rfind("\/") != len(p_results_dir):
              p_results_dir = p_results_dir + "/"
              print(p_results_dir)
-   if (results_file == '' or p_results_dir == ''):
+   if (results_file == '' or p_results_dir == '' or platform == ''):
       sys.exit(2)
    print('Raw file is "', results_file)
    print('Output directory is "', p_results_dir)
-   parse_results(results_file, p_results_dir)
+   print('Platform is "', platform)
+   parse_results(results_file, p_results_dir,platform)
 
-def get_run_token( keyword ):
+def get_run_token( keyword, platform ):
    keyword_trimmed = re.sub(r'&catalog.*', '', keyword)
-   run_token = str(timestamp) + "-DHGate-" + keyword_trimmed
+   run_token = str(timestamp) + "-" + platform + "-" + keyword_trimmed
    # print(run_token)
    return run_token
 
@@ -66,35 +70,72 @@ def scrub_keyword(keyword):
    keyword_trimmed = keyword_trimmed.lower()
    return keyword_trimmed
 
+# finds all the searchkey columns in a given raw results file
+# e.g., DHGate: searchkey, searchkey2
+#       Aliexpress: searchkey
+def get_searchkey_columns(results_file):
+   df = pd.read_csv(results_file)
+   column_names = list(df.columns.values)
+   searchkey_list = []
+   for column_name in column_names:
+       if re.match('searchkey.*', column_name):
+           searchkey_list.append(column_name)
+   # print (searchkey_list)
+   return searchkey_list
+
+
+# Drop data rows with "" or "Nan" values in the searchkey
+def find_unique_searchkey(results_file, searchkey_name):
+   nan_value = float("NaN")
+   dataframe = pd.read_csv(results_file)
+   dataframe.replace("", nan_value, inplace=True)
+   dataframe.dropna(subset = [searchkey_name], inplace=True)
+   return dataframe[searchkey_name].unique()
+
 # generates map of unique keywords (based on searchkey field) to come up
 # with single filename for all variations of searchkey values
 def generate_file_keywords_map( results_file ):
-   df = pd.read_csv(results_file)
-   keyword_list = list(df.searchkey.unique())
-   keyword_map = {}
+   # Some platforms have multiple searchkeys.  Find all searchkeys and
+   # then filter to find unique values.
+   searchkey_list = get_searchkey_columns(results_file)
+   keyword_list = []
+   for searchkey in searchkey_list:
+      keyword_list.extend(list(find_unique_searchkey(results_file, searchkey)))
 
+   keyword_map = {}
    for keyword in keyword_list:
       keyword_map[scrub_keyword(keyword)] = 1
-   # print ("generate_file: ", keyword_map.keys())
+   print ("generate_file: ", keyword_map.keys())
    return keyword_map
 
 # generates list of unique searchkey field
 def generate_keywords_list( results_file ):
-    df = pd.read_csv(results_file)
-    keyword_list = list(df.searchkey.unique())
-    # print ("generate: ", keyword_list)
-    return keyword_list
+   # Some platforms have multiple searchkeys.  Find all searchkeys and
+   # then filter to find unique values.
+   searchkey_list = get_searchkey_columns(results_file)
+   keyword_list = []
+   for searchkey in searchkey_list:
+      keyword_list.extend(list(find_unique_searchkey(results_file, searchkey)))
 
-def parse_results(results_file, p_results_dir):
+   # keywords are not scrubbed in this case. i.e., we want the keyword list
+   # to remain in its raw form for easier filtering later on.
+   keyword_map = {}
+   for keyword in keyword_list:
+      keyword_map[keyword] = 1
+   keyword_list = list(keyword_map.keys())
+   print ("generate: ", keyword_list)
+   return keyword_list
+
+def parse_results(results_file, p_results_dir,platform):
    # Make the results directory
    if not os.path.exists(p_results_dir):
       os.makedirs(p_results_dir)
 
    headerline = get_header( results_file )
-   file_keyword_list = list(generate_file_keywords_map(results_file).keys())
 
+   file_keyword_list = list(generate_file_keywords_map(results_file).keys())
    for filename_keyword in list(file_keyword_list):
-       p_results_file = p_results_dir + get_run_token(filename_keyword) + ".csv"
+       p_results_file = p_results_dir + get_run_token(filename_keyword, platform) + ".csv"
        processed_file = open(p_results_file, "w")
        processed_file.write(headerline)
        processed_file.close()
@@ -103,16 +144,21 @@ def parse_results(results_file, p_results_dir):
    # searchkey capture is not exact and often relies on proper parsing/scrubbing
    # of the values found in the URLs.
    keyword_list = generate_keywords_list (results_file)
+
    for keyword in keyword_list:
        filename_keyword = scrub_keyword(keyword)
-       p_results_file = p_results_dir + get_run_token(filename_keyword) + ".csv"
+       p_results_file = p_results_dir + get_run_token(filename_keyword, platform) + ".csv"
 
-       df = pd.read_csv(results_file)
-       # Apply filter condition based on original searchkey value
-       df = df[df['searchkey'] == keyword]
+       # traverse through all the searchkeys to determine which rows to append
+       # into split files.
+       searchkey_list = get_searchkey_columns(results_file)
 
-       # Output of seachkey values must be put into the corresponding filename
-       df.to_csv(p_results_file, mode='a', header=False)
+       for searchkey_name in searchkey_list:
+          df = pd.read_csv(results_file)
+          # Apply filter condition based on original searchkey value
+          df = df[df[searchkey_name] == keyword]
+          # Output of seachkey values must be put into the corresponding filename
+          df.to_csv(p_results_file, mode='a', header=False, index=False)
 
    return
 
