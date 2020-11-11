@@ -8,7 +8,8 @@ import getopt
 import csv
 import re
 import pandas as pd
-
+import json
+import requests
 
 
 ################
@@ -59,8 +60,52 @@ def main(argv):
 ################
 # Private Functions to create individual files based on keyword names
 ################
-def get_run_token(timestamp, keyword, platform ):
-   run_token = str(timestamp) + "_" + platform + "_" + keyword
+
+# This function needs to be replaced with API call to Admin tool
+def get_crawler_id (platform):
+   crawler_id = 0
+
+   if (platform.lower() == 'aliexpress'):
+      crawler_id = 11
+   elif (platform.lower() == 'dhgate'):
+      crawler_id = 8
+   elif (platform.lower() == 'bukalapak'):
+      crawler_id = 10
+   elif (platform.lower() == 'lazadacommy'):
+      crawler_id = 14
+   elif (platform.lower() == 'lazadacoid'):
+      crawler_id = 15
+   return crawler_id
+
+# Run token for file naming convention is as follows:
+# <timestamp>_<crawlerId>_<assetId>_<keywordId>_<keyword(s)>
+# filename_keyword & keyword are needed to generate the right run_token.
+# the keyword will need to be matched to the start_url found in the crawler
+# table in the Admin Tool
+def get_run_token(timestamp, filename_keyword, keyword, platform ):
+
+   crawler_id = get_crawler_id( platform )
+   # print (str(crawler_id))
+   response = requests.get("https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=" + str(crawler_id))
+   json_crawl_data = json.loads(response.text)
+
+   keyword_id = ""
+   asset_id = ""
+
+   for crawl_data in json_crawl_data:
+      #print (crawl_data['start_url'], keyword)
+      #print (scrub_keyword(crawl_data['keyword']), keyword)
+      # if scrub_keyword(crawl_data['keyword']).lower().find(keyword) != -1:
+      if (scrub_keyword(crawl_data['keyword']).lower() == keyword or
+         (scrub_keyword(crawl_data['start_url']).lower().find(keyword) != -1 and keyword_id == "")):
+         #print (scrub_keyword(crawl_data['keyword']), keyword)
+
+         keyword_id = crawl_data['keyword_id']
+         asset_id = crawl_data['asset_id']
+         run_token = str(timestamp) + "_" + str(crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + filename_keyword
+
+   run_token = str(timestamp) + "_" + str(crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + filename_keyword
+
    # print(run_token)
    return run_token
 
@@ -80,8 +125,14 @@ def scrub_keyword(keyword):
    # Character encodings:
    # %20 (space) = '+' (needed for filenaming conventions)
    keyword_trimmed = re.sub(r'%20','+', keyword_trimmed)
+
+   # _ (space) = '+' (needed for keyword comparisons in **json API**)
+   keyword_trimmed = re.sub(r' ','+', keyword_trimmed)
+
    # %21 = !
    keyword_trimmed = re.sub(r'%21','!', keyword_trimmed)
+   # %2521 = ! (DHGate - No!no!)
+   keyword_trimmed = re.sub(r'%2521','!', keyword_trimmed)
 
    # lower case all the words
    keyword_trimmed = keyword_trimmed.lower()
@@ -160,7 +211,7 @@ def parse_results(results_file, p_results_dir,platform):
 
    file_keyword_list = list(generate_file_keywords_map(results_file).keys())
    for filename_keyword in list(file_keyword_list):
-       p_results_file = p_results_dir + get_run_token(timestamp, filename_keyword, platform) + ".csv"
+       p_results_file = p_results_dir + get_run_token(timestamp, filename_keyword, filename_keyword, platform) + ".csv"
        processed_file = open(p_results_file, "w")
        processed_file.write(headerline)
        processed_file.close()
@@ -172,7 +223,7 @@ def parse_results(results_file, p_results_dir,platform):
 
    for keyword in keyword_list:
        filename_keyword = scrub_keyword(keyword)
-       p_results_file = p_results_dir + get_run_token(timestamp, filename_keyword, platform) + ".csv"
+       p_results_file = p_results_dir + get_run_token(timestamp, filename_keyword, filename_keyword, platform) + ".csv"
 
        # traverse through all the searchkeys to determine which rows to append
        # into split files.
