@@ -9,7 +9,7 @@ import csv
 import re
 import pandas as pd
 
-timestamp = int(str(time.time()).replace('.', ''))
+
 
 ################
 # Reading in command line arguments
@@ -21,11 +21,11 @@ def main(argv):
    try:
       opts, args = getopt.getopt(argv,"hp:i:o:",["platform=","results_file=","p_results_dir="])
    except getopt.GetoptError:
-      print('parse_results.py -p <platform> -i <raw inputfile> -o <output directory>')
+      print('parse_results.py -p <platform> -i <raw inputfile> -o <output directory> -p <platform>')
       sys.exit(2)
    for opt, arg in opts:
       if opt == '-h':
-         print('parse_results.py -i <raw inputfile> -o <output directory>')
+         print('parse_results.py -i <raw inputfile> -o <output directory> -p <platform>')
          sys.exit()
       elif opt in ("-p", "--platform"):
          platform = arg
@@ -39,14 +39,25 @@ def main(argv):
              print(p_results_dir)
    if (results_file == '' or p_results_dir == '' or platform == ''):
       sys.exit(2)
-   print('Raw file is "', results_file)
    print('Output directory is "', p_results_dir)
    print('Platform is "', platform)
-   parse_results(results_file, p_results_dir,platform)
 
-def get_run_token( keyword, platform ):
-   keyword_trimmed = re.sub(r'&catalog.*', '', keyword)
-   run_token = str(timestamp) + "-" + platform + "-" + keyword_trimmed
+   if os.path.isdir(results_file):
+      print('Raw directory is "', results_file)
+      results_dir = results_file
+      for results_filename in os.listdir(results_dir):
+         if results_dir.rfind("\/") != len(results_dir):
+            #results_dir = results_dir + "/"
+            print(results_dir)
+         results_file = results_dir + results_filename
+         print('Raw file is "', results_file)
+         parse_results(results_file, p_results_dir, platform)
+   else:
+      print('Raw file is "', results_file)
+      parse_results(results_file, p_results_dir,platform)
+
+def get_run_token(timestamp, keyword, platform ):
+   run_token = str(timestamp) + "_" + platform + "_" + keyword
    # print(run_token)
    return run_token
 
@@ -58,7 +69,10 @@ def get_header( results_file ):
 
 def scrub_keyword(keyword):
    # Additional query parameters
+   # Aliexpress searchkey ltype
    keyword_trimmed = re.sub(r'&ltype.*','', keyword)
+   # DHGate searchkey contains catalog
+   keyword_trimmed = re.sub(r'&catalog.*', '', keyword_trimmed)
 
    # Character encodings:
    # %20 (space) = '+' (needed for filenaming conventions)
@@ -105,7 +119,7 @@ def generate_file_keywords_map( results_file ):
    keyword_map = {}
    for keyword in keyword_list:
       keyword_map[scrub_keyword(keyword)] = 1
-   print ("generate_file: ", keyword_map.keys())
+   # print ("generate_file: ", keyword_map.keys())
    return keyword_map
 
 # generates list of unique searchkey field
@@ -123,10 +137,14 @@ def generate_keywords_list( results_file ):
    for keyword in keyword_list:
       keyword_map[keyword] = 1
    keyword_list = list(keyword_map.keys())
-   print ("generate: ", keyword_list)
+   # print ("generate: ", keyword_list)
    return keyword_list
 
 def parse_results(results_file, p_results_dir,platform):
+   # Get new timestamp for each file since a keyword could span
+   # across 2 files (i.e., since Octoparse has max limit of 20K rows)
+   timestamp = int(str(time.time()).replace('.', ''))
+
    # Make the results directory
    if not os.path.exists(p_results_dir):
       os.makedirs(p_results_dir)
@@ -135,7 +153,7 @@ def parse_results(results_file, p_results_dir,platform):
 
    file_keyword_list = list(generate_file_keywords_map(results_file).keys())
    for filename_keyword in list(file_keyword_list):
-       p_results_file = p_results_dir + get_run_token(filename_keyword, platform) + ".csv"
+       p_results_file = p_results_dir + get_run_token(timestamp, filename_keyword, platform) + ".csv"
        processed_file = open(p_results_file, "w")
        processed_file.write(headerline)
        processed_file.close()
@@ -147,7 +165,7 @@ def parse_results(results_file, p_results_dir,platform):
 
    for keyword in keyword_list:
        filename_keyword = scrub_keyword(keyword)
-       p_results_file = p_results_dir + get_run_token(filename_keyword, platform) + ".csv"
+       p_results_file = p_results_dir + get_run_token(timestamp, filename_keyword, platform) + ".csv"
 
        # traverse through all the searchkeys to determine which rows to append
        # into split files.
@@ -157,6 +175,7 @@ def parse_results(results_file, p_results_dir,platform):
           df = pd.read_csv(results_file)
           # Apply filter condition based on original searchkey value
           df = df[df[searchkey_name] == keyword]
+          df["results_itemnumber"].astype(int)
           # Output of seachkey values must be put into the corresponding filename
           df.to_csv(p_results_file, mode='a', header=False, index=False)
 
