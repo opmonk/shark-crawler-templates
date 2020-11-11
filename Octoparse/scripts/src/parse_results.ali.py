@@ -56,6 +56,9 @@ def main(argv):
       print('Raw file is "', results_file)
       parse_results(results_file, p_results_dir,platform)
 
+################
+# Private Functions to create individual files based on keyword names
+################
 def get_run_token(timestamp, keyword, platform ):
    run_token = str(timestamp) + "_" + platform + "_" + keyword
    # print(run_token)
@@ -140,6 +143,10 @@ def generate_keywords_list( results_file ):
    # print ("generate: ", keyword_list)
    return keyword_list
 
+
+################
+# Main function for parsing through raw results and generating individual files.
+################
 def parse_results(results_file, p_results_dir,platform):
    # Get new timestamp for each file since a keyword could span
    # across 2 files (i.e., since Octoparse has max limit of 20K rows)
@@ -173,9 +180,16 @@ def parse_results(results_file, p_results_dir,platform):
 
        for searchkey_name in searchkey_list:
           df = pd.read_csv(results_file)
+
+          # Drop rows without an itemnumber (should this be url?)
+          df = df[~df['results_itemnumber'].isnull()]
+
+          # In Aliexpress, for some reason results_itemnumber is being converted to float
+          df['results_itemnumber'] = df['results_itemnumber'].astype('int64')
+
           # Apply filter condition based on original searchkey value
           df = df[df[searchkey_name] == keyword]
-          df["results_itemnumber"].astype(int)
+
           # Output of seachkey values must be put into the corresponding filename
           df.to_csv(p_results_file, mode='a', header=False, index=False)
 
