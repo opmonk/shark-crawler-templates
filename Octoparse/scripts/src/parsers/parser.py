@@ -117,7 +117,7 @@ class Parser(object):
         for crawl_data in json_crawl_data:
             # !!! Strange behavior.  Throwing TypeError after I run several times.
             # If I comment/uncomment below line, seems to get rid of type error.
-            #print (crawl_data["keyword"])
+            print (crawl_data["keyword"])
 
             if (self.encode_keyword(crawl_data["keyword"]).lower() == keyword or
                 (self.encode_keyword(crawl_data["start_url"]).lower().find(keyword) != -1 and keyword_id == "")):
@@ -138,8 +138,10 @@ class Parser(object):
         """
         # _ (space) = '+' (needed for keyword comparisons in **json API**)
         keyword_trimmed = re.sub(r' ','+', keyword)
-        keyword_trimmed = re.sub(r'!','%21', keyword)
-        keyword_trimmed = re.sub(r'\'','%27', keyword)
+        keyword_trimmed = re.sub(r'\'','%27', keyword_trimmed)
+
+        # lower case all the words
+        keyword_trimmed = keyword_trimmed.lower()
         return keyword_trimmed
 
     def __get_header(self):
@@ -160,7 +162,7 @@ class Parser(object):
         # %20 (space) = '+' (needed for filenaming conventions)
         keyword_trimmed = re.sub(r'%20','+', keyword)
 
-
+        keyword_trimmed = re.sub(r' ','+', keyword_trimmed)
         # %21 = !
         keyword_trimmed = re.sub(r'%21','!', keyword_trimmed)
 
@@ -299,5 +301,10 @@ class Parser(object):
 
 
 if __name__=="__main__":
-    # x = AliexpressParser(sys.argv[1:]).execute()
-    Parser(sys.argv[1:]).execute()
+    marketplaceParser = argv[0]
+    print (argv[0])
+    if (isinstance(argv[0],Parser)):
+        run([marketplaceParser, argv[1]])
+    else:
+        run([marketplaceParser, "-h"])
+    #Parser(sys.argv[1:]).execute()
