@@ -116,10 +116,10 @@ class Parser(object):
         for crawl_data in json_crawl_data:
             # Strange behavior.  Throwing TypeError after I run several times.
             # If I comment/uncomment below line, seems to get rid of type error.
-            #print (crawl_data["keyword"])
+            print (crawl_data["keyword"])
 
-            if (self.__scrub_keyword(crawl_data["keyword"]).lower() == keyword or
-                (self.__scrub_keyword(crawl_data["start_url"]).lower().find(keyword) != -1 and keyword_id == "")):
+            if (self.scrub_keyword(crawl_data["keyword"]).lower() == keyword or
+                (self.scrub_keyword(crawl_data["start_url"]).lower().find(keyword) != -1 and keyword_id == "")):
 
                 keyword_id = crawl_data["keyword_id"]
                 asset_id = crawl_data["asset_id"]
@@ -136,7 +136,7 @@ class Parser(object):
         f.close()
         return header
 
-    def __scrub_keyword(self, keyword):
+    def scrub_keyword(self, keyword):
         """
         Cleanse/Standardize the keyword for easier comparison to those stored
         in IPShark Admin tool (i.e., start_urls & keyword).
@@ -144,23 +144,16 @@ class Parser(object):
         Args:
         keyword - raw searchkey parameter
         """
-        # Additional query parameters
-        # Aliexpress searchkey ltype
-        keyword_trimmed = re.sub(r'&ltype.*','', keyword)
-        # DHGate searchkey contains catalog
-        keyword_trimmed = re.sub(r'&catalog.*', '', keyword_trimmed)
 
         # Character encodings:
         # %20 (space) = '+' (needed for filenaming conventions)
-        keyword_trimmed = re.sub(r'%20','+', keyword_trimmed)
+        keyword_trimmed = re.sub(r'%20','+', keyword)
 
         # _ (space) = '+' (needed for keyword comparisons in **json API**)
         keyword_trimmed = re.sub(r' ','+', keyword_trimmed)
 
         # %21 = !
         keyword_trimmed = re.sub(r'%21','!', keyword_trimmed)
-        # %2521 = ! (DHGate - No!no!)
-        keyword_trimmed = re.sub(r'%2521','!', keyword_trimmed)
 
         # lower case all the words
         keyword_trimmed = keyword_trimmed.lower()
@@ -199,7 +192,7 @@ class Parser(object):
 
             keyword_map = {}
             for keyword in keyword_list:
-                keyword_map[self.__scrub_keyword(keyword)] = 1
+                keyword_map[self.scrub_keyword(keyword)] = 1
         # print ("generate_file: ", keyword_map.keys())
         return keyword_map
 
@@ -249,7 +242,7 @@ class Parser(object):
         keyword_list = self.__generate_keywords_list()
 
         for keyword in keyword_list:
-            filename_keyword = self.__scrub_keyword(keyword)
+            filename_keyword = self.scrub_keyword(keyword)
             self.p_results_file = self.p_results_dir + self.__get_run_token(timestamp, filename_keyword, filename_keyword) + ".csv"
 
             # traverse through all the searchkeys to determine which rows to append
