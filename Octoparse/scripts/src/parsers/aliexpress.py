@@ -15,7 +15,7 @@ class AliexpressParser(Parser):
         return keyword_trimmed
 
     def filter(self, dataframe):
-        # Drop rows without an itemnumber (should this be url?)
+        # Drop rows without an itemnumber (should this be results_url instead?)
         dataframe = dataframe[~dataframe['results_itemnumber'].isnull()]
 
         # In Aliexpress, for some reason results_itemnumber is being converted to float

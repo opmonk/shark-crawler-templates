@@ -119,8 +119,8 @@ class Parser(object):
             # If I comment/uncomment below line, seems to get rid of type error.
             #print (crawl_data["keyword"])
 
-            if (self.scrub_keyword(crawl_data["keyword"]).lower() == keyword or
-                (self.scrub_keyword(crawl_data["start_url"]).lower().find(keyword) != -1 and keyword_id == "")):
+            if (self.encode_keyword(crawl_data["keyword"]).lower() == keyword or
+                (self.encode_keyword(crawl_data["start_url"]).lower().find(keyword) != -1 and keyword_id == "")):
 
                 keyword_id = crawl_data["keyword_id"]
                 asset_id = crawl_data["asset_id"]
@@ -130,6 +130,17 @@ class Parser(object):
             print("ERROR", keyword)
         run_token = str(self.timestamp) + "_" + str(crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + filename_keyword
         return run_token
+
+    def encode_keyword(self, keyword):
+        """
+        Keywords are stored with spaces.  So need to encode to ensure proper
+        comparison with start_urls
+        """
+        # _ (space) = '+' (needed for keyword comparisons in **json API**)
+        keyword_trimmed = re.sub(r' ','+', keyword)
+        keyword_trimmed = re.sub(r'!','%21', keyword)
+        keyword_trimmed = re.sub(r'\'','%27', keyword)
+        return keyword_trimmed
 
     def __get_header(self):
         f = open(self.results_file, 'r')
@@ -149,8 +160,6 @@ class Parser(object):
         # %20 (space) = '+' (needed for filenaming conventions)
         keyword_trimmed = re.sub(r'%20','+', keyword)
 
-        # _ (space) = '+' (needed for keyword comparisons in **json API**)
-        keyword_trimmed = re.sub(r' ','+', keyword_trimmed)
 
         # %21 = !
         keyword_trimmed = re.sub(r'%21','!', keyword_trimmed)
