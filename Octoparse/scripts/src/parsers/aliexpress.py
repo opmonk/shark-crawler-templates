@@ -10,13 +10,17 @@ class AliexpressParser(Parser):
     def scrub_keyword(self, keyword):
         keyword_trimmed = super(AliexpressParser,self).scrub_keyword(keyword)
 
-        # Additional query parameters
-        # Aliexpress searchkey ltype
+        # searchkey contains ltype
         keyword_trimmed = re.sub(r'&ltype.*','', keyword_trimmed)
-
-        # lower case all the words
-        keyword_trimmed = keyword_trimmed.lower()
         return keyword_trimmed
+
+    def filter(self, dataframe):
+        # Drop rows without an itemnumber (should this be url?)
+        dataframe = dataframe[~dataframe['results_itemnumber'].isnull()]
+
+        # In Aliexpress, for some reason results_itemnumber is being converted to float
+        dataframe['results_itemnumber'] = dataframe['results_itemnumber'].astype('int64')
+        return dataframe
 
 if __name__=="__main__":
     x = AliexpressParser(sys.argv[1:]).execute()
