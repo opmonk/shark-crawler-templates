@@ -97,6 +97,7 @@ class Parser(object):
             crawler_id = 15
         return crawler_id
 
+
     def __get_run_token(self, filename_keyword, keyword):
         """
         Run token for file naming convention is as follows:
@@ -109,25 +110,55 @@ class Parser(object):
         crawler_id = self.__get_crawler_id()
         # print (str(crawler_id))
         response = requests.get("https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=" + str(crawler_id))
-        json_crawl_data = json.loads(response.text)
+        json_db_crawl_data = json.loads(response.text)
 
         keyword_id = ""
         asset_id = ""
+        # priority is assigned for each use case as follows (in order of highest to lowest priority).
+        # This is needed to ensure that keywordId & assetId are not overwritten
+        # by a lower priority use case.
+        #
+        # 1) keyword ~= DB_start_url && keyword contains additional query parameters
+        # 2) filename == DB_keyword && keyword ~= DB_start_url
+        # 3) filename == DB_keyword
+        # 4) filename ~= DB_start_url  # Since keyword may not be scrubbed, match to scrubbed keyword
+        priority = 100
         #print (response.text)
-        for crawl_data in json_crawl_data:
-            # !!! Strange behavior.  Throwing TypeError after I run several times.
-            # If I comment/uncomment below line, seems to get rid of type error.
-            print (crawl_data["keyword"])
+        for crawl_data in json_db_crawl_data:
 
-            if (self.encode_keyword(crawl_data["keyword"]).lower() == keyword or
-                (self.encode_keyword(crawl_data["start_url"]).lower().find(keyword) != -1 and keyword_id == "")):
+            _filename = self.scrub_keyword(filename_keyword)
+            _keyword = keyword.lower()
 
+            _db_keyword = self.encode_keyword(crawl_data["keyword"])
+            _db_start_url = self.encode_keyword(crawl_data["start_url"])
+
+            #print ("List:", priority, _keyword, _filename, _db_start_url, _db_keyword, _db_start_url.find(_keyword))
+
+            if (_db_start_url.find(_keyword) != -1 and _keyword.find('&') != -1):
+                priority = 1
+                print ("Priority2:", priority, _keyword, _filename, _db_start_url, _db_keyword)
                 keyword_id = crawl_data["keyword_id"]
                 asset_id = crawl_data["asset_id"]
-                run_token = str(self.timestamp) + "_" + str(crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + filename_keyword
+            elif (_db_keyword == _filename and _db_start_url.find(_keyword) != -1 and priority > 1):
+                priority = 2
+                print ("Priority1:", priority, _keyword, _filename, _db_start_url, _db_keyword)
+                keyword_id = crawl_data["keyword_id"]
+                asset_id = crawl_data["asset_id"]
+            elif (_db_keyword == _filename and priority > 2):
+                priority = 3
+                print ("Priority3:", priority, _keyword, _filename, _db_start_url, _db_keyword)
+                keyword_id = crawl_data["keyword_id"]
+                asset_id = crawl_data["asset_id"]
+            elif (_db_start_url.find(_filename) != -1 and priority > 3):
+                priority = 4
+                print ("Priority4:", priority, _keyword, _filename, _db_start_url, _db_keyword)
+                keyword_id = crawl_data["keyword_id"]
+                asset_id = crawl_data["asset_id"]
+            elif (json_db_crawl_data[-1] == crawl_data and priority == 100):
+                # This is the last element in the json object and no use case was found
+                print ("Priority 100:", priority, _keyword, _filename, _db_start_url, _db_keyword, _db_start_url.find(_keyword))
 
-        if str(keyword_id) == "" or str(asset_id) == "":
-            print("ERROR", keyword)
+
         run_token = str(self.timestamp) + "_" + str(crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + filename_keyword
         return run_token
 
@@ -161,8 +192,6 @@ class Parser(object):
         # Character encodings:
         # %20 (space) = '+' (needed for filenaming conventions)
         keyword_trimmed = re.sub(r'%20','+', keyword)
-
-        keyword_trimmed = re.sub(r' ','+', keyword_trimmed)
         # %21 = !
         keyword_trimmed = re.sub(r'%21','!', keyword_trimmed)
 
@@ -242,6 +271,13 @@ class Parser(object):
             processed_file.write(headerline)
             processed_file.close()
 
+    def __generate_file(self):
+        headerline = self.__get_header()
+        processed_file = open(self.p_results_file, "w")
+        processed_file.write(headerline)
+        processed_file.close()
+
+
     def filter(self, dataframe):
         """
         This added filter in place for platforms to do additional filtering on
@@ -265,7 +301,15 @@ class Parser(object):
 
         for keyword in keyword_list:
             filename_keyword = self.scrub_keyword(keyword)
-            self.p_results_file = self.p_results_dir + self.__get_run_token(filename_keyword, filename_keyword) + ".csv"
+
+            # If file does not exist, then need to create a new file with header
+            # row.
+            print("creating files:", filename_keyword, keyword)
+            self.p_results_file = self.p_results_dir + self.__get_run_token(filename_keyword, keyword) + ".csv"
+
+            # This checks if the keyword & filename_keyword were mismatched.
+            if not os.path.isfile(self.p_results_file):
+                self.__generate_file()
 
             # traverse through all the searchkeys to determine which rows to append
             # into split files.
@@ -294,17 +338,11 @@ class Parser(object):
         if not os.path.exists(self.p_results_dir):
             os.makedirs(self.p_results_dir)
 
-        self.__generate_files()
+        #self.__generate_files()
         self.__insert_rows()
 
         return
 
 
 if __name__=="__main__":
-    marketplaceParser = argv[0]
-    print (argv[0])
-    if (isinstance(argv[0],Parser)):
-        run([marketplaceParser, argv[1]])
-    else:
-        run([marketplaceParser, "-h"])
-    #Parser(sys.argv[1:]).execute()
+    Parser(sys.argv[1:]).execute()
