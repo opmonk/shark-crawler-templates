@@ -28,8 +28,8 @@ class Parser(object):
     __p_results_dir = ''
     __platform = ''
     __timestamp = ''
-    __crawler_id = 0        # Caches crawlerId from API Call
-    __crawlers_data = {}     # Caches all keywords & start_urls from API Call
+    __crawler_id = 0          # Caches crawlerId from API Call
+    __crawlers_data = None    # Caches all keywords & start_urls from API Call
 
     def __init__(self, argv):
 
@@ -99,6 +99,24 @@ class Parser(object):
             print ("ERROR:", self.__platform, "does not exist in Admin Tool", )
             sys.exit(2)
 
+    def __set_crawlers_data(self):
+        if not bool(self.__crawlers_data):
+            attempts = 0
+            max_attempts = 3
+            while attempts < max_attempts:
+                response = requests.get("https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=" + str(self.__crawler_id))
+                self.__crawlers_data = json.loads(response.text)
+                print(response.text, response.status_code)
+                if response.status_code != 200:
+                    print("ERROR:", response.text, attempts)
+                    attempts = attempts + 1
+                else:
+                    attempts = max_attempts
+
+                if response.status_code != 200 and attempts == max_attempts:
+                    print("EXITING:", response.text, attempts)
+                    sys.exit(2)
+
 
     def __get_run_token(self, scrubbed_keyword, keyword):
         """
@@ -108,15 +126,6 @@ class Parser(object):
         the keyword will need to be matched to the start_url found in the crawler
         table in the Admin Tool
         """
-
-        self.__set_crawler_id()
-
-        if not bool(self.__crawlers_data):
-            response = requests.get("https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=" + str(self.__crawler_id))
-            self.__crawlers_data = json.loads(response.text)
-            print(response.text)
-            print(self.__crawlers_data)
-
         keyword_id = ""
         asset_id = ""
         # priority is assigned for each use case as follows (in order of highest to lowest priority).
@@ -130,42 +139,32 @@ class Parser(object):
         priority = 100
 
         for index in range(len(self.__crawlers_data)):
-            #for key in self.__crawlers_data[index]:
-
-            _filename = self.scrub(scrubbed_keyword)
-            _keyword = keyword.lower()
-
             _db_keyword = self.__encode(self.__crawlers_data[index]["keyword"])
             _db_start_url = self.__encode(self.__crawlers_data[index]["start_url"])
 
-            # !!! Strange Behavior. You may need to comment/uncomment the
-            # following line to eliminate the string TypeError between runs.
-            #print ("List:", priority, _keyword, _filename, _db_start_url, _db_keyword, _db_start_url.find(_keyword))
-
-            if (_db_start_url.find(_keyword) != -1 and _keyword.find('&') != -1):
+            if (_db_start_url.find(keyword) != -1 and keyword.find('&') != -1):
                 priority = 1
-                print ("Priority1:", priority, _keyword, _filename, _db_start_url, _db_keyword)
+                print ("Priority1:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
                 keyword_id = self.__crawlers_data[index]["keyword_id"]
                 asset_id = self.__crawlers_data[index]["asset_id"]
-            elif (_db_keyword == _filename and _db_start_url.find(_keyword) != -1 and priority > 1):
+            elif (_db_keyword == scrubbed_keyword and _db_start_url.find(keyword) != -1 and priority > 1):
                 priority = 2
-                print ("Priority2:", priority, _keyword, _filename, _db_start_url, _db_keyword)
+                print ("Priority2:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
                 keyword_id = self.__crawlers_data[index]["keyword_id"]
                 asset_id = self.__crawlers_data[index]["asset_id"]
-            elif (_db_keyword == _filename and priority > 2):
+            elif (_db_keyword == scrubbed_keyword and priority > 2):
                 priority = 3
-                print ("Priority3:", priority, _keyword, _filename, _db_start_url, _db_keyword)
+                print ("Priority3:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
                 keyword_id = self.__crawlers_data[index]["keyword_id"]
                 asset_id = self.__crawlers_data[index]["asset_id"]
-            elif (_db_start_url.find(_filename) != -1 and priority > 3):
+            elif (_db_start_url.find(scrubbed_keyword) != -1 and priority > 3):
                 priority = 4
-                print ("Priority4:", priority, _keyword, _filename, _db_start_url, _db_keyword)
+                print ("Priority4:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
                 keyword_id = self.__crawlers_data[index]["keyword_id"]
                 asset_id = self.__crawlers_data[index]["asset_id"]
             elif (self.__crawlers_data[-1] == self.__crawlers_data[index] and priority == 100):
                 # This is the last element in the json object and no use case was found
-                print ("Priority 100:", priority, _keyword, _filename, _db_start_url, _db_keyword, _db_start_url.find(_keyword))
-
+                print ("Priority 100:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword, _db_start_url.find(keyword))
 
         run_token = str(self.__timestamp) + "_" + str(self.__crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + scrubbed_keyword
         return run_token
@@ -183,7 +182,6 @@ class Parser(object):
         # lower case all the words
         keyword_trimmed = keyword_trimmed.lower()
         return keyword_trimmed
-
 
     def __decode(self, keyword):
         """
@@ -297,7 +295,7 @@ class Parser(object):
             scrubbed_keyword = self.scrub(keyword)
 
             print("creating files:", scrubbed_keyword, keyword)
-            self.p_results_file = self.__p_results_dir + self.__get_run_token(scrubbed_keyword, keyword) + ".csv"
+            self.p_results_file = self.__p_results_dir + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
 
             # If file does not exist, then need to create a new file with header
             # row.
@@ -327,6 +325,11 @@ class Parser(object):
         # Get new timestamp for each file since a keyword could span
         # across 2 files (i.e., since Octoparse has max limit of 20K rows)
         self.__timestamp = int(str(time.time()).replace('.', ''))
+
+        # API Calls: Crawler Id needs to be set prior to setting
+        # crawlers_data (i.e., crawler_id is needed to obtain crawlers_data)
+        self.__set_crawler_id()         # self.__platform required
+        self.__set_crawlers_data()      # self.__crawler_id required
 
         # Make the results directory
         if not os.path.exists(self.__p_results_dir):

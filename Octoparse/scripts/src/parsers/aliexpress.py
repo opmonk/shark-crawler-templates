@@ -14,6 +14,8 @@ class AliexpressParser(Parser):
         keyword_trimmed = re.sub(r'&ltype.*','', keyword_trimmed)
         return keyword_trimmed
 
+
+
     def filter(self, dataframe):
         # Drop rows without an itemnumber (should this be results_url instead?)
         dataframe = dataframe[~dataframe['results_itemnumber'].isnull()]
