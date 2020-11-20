@@ -7,8 +7,8 @@ class DHGateParser(Parser):
         print(isinstance(self, Parser))
         Parser.__init__(self, argv)
 
-    def scrub_keyword(self, keyword):
-        keyword_trimmed = super(DHGateParser,self).scrub_keyword(keyword)
+    def scrub(self, keyword):
+        keyword_trimmed = super(DHGateParser,self).scrub(keyword)
 
         # DHGate searchkey contains catalog
         keyword_trimmed = re.sub(r'&catalog.*', '', keyword_trimmed)
