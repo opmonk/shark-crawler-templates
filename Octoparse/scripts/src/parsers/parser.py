@@ -8,6 +8,9 @@ import re
 import pandas as pd
 import json
 import requests
+import boto3
+import s3fs
+from io import StringIO
 
 
 class Parser(object):
@@ -30,17 +33,19 @@ class Parser(object):
     __timestamp = ''
     __crawler_id = 0          # Caches crawlerId from API Call
     __crawlers_data = None    # Caches all keywords & start_urls from API Call
+    __is_s3_bucket = False    # Determines if input & output files/dir are s3 buckets
+    __df = None               # pandas Data Frame
 
     def __init__(self, argv):
 
         try:
-            opts, args = getopt.getopt(argv,"hp:i:o:",["platform=","results_file=","p_results_dir="])
+            opts, args = getopt.getopt(argv,"bhp:i:o:",["platform=","results_file=","p_results_dir="])
         except getopt.GetoptError:
-            print('parse_results.py -p <platform> -i <raw inputfile> -o <output directory> -p <platform>')
+            print('parse_results.py [-h] [-b] -i <raw inputfile> -o <output directory> -p <platform>')
             sys.exit(2)
         for opt, arg in opts:
             if opt == '-h':
-                print('parse_results.py -i <raw inputfile> -o <output directory> -p <platform>')
+                print('parse_results.py [-h] [-b] -i <raw inputfile> -o <output directory> -p <platform>')
                 sys.exit()
             elif opt in ("-p", "--platform"):
                 self.__platform = arg
@@ -52,9 +57,11 @@ class Parser(object):
                 if self.__p_results_dir.rfind("\/") != len(self.__p_results_dir):
                     self.__p_results_dir = self.__p_results_dir + "/"
                     print(self.__p_results_dir)
+            elif opt in ("-b"):
+                self.__is_s3_bucket = True
 
         if (self.__results_file == '' or self.__p_results_dir == '' or self.__platform == ''):
-            print('parse_results.py -i <raw inputfile> -o <output directory> -p <platform>')
+            print('parse_results.py [-h] [-b] -i <raw inputfile> -o <output directory> -p <platform>')
             sys.exit(2)
 
         print('Output directory is: ', self.__p_results_dir)
@@ -75,10 +82,10 @@ class Parser(object):
                     #results_dir = results_dir + "/"
                     print(results_dir)
                     self.__results_file = results_dir + results_filename
-                    print('Raw file is "', self.__results_file)
+                    print('Raw file is: ', self.__results_file)
                     self.parse_results()
         else:
-            print('Raw file is "', self.__results_file)
+            print('Raw file is: ', self.__results_file)
             self.parse_results()
 
     def __set_crawler_id (self):
@@ -106,7 +113,7 @@ class Parser(object):
             while attempts < max_attempts:
                 response = requests.get("https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=" + str(self.__crawler_id))
                 self.__crawlers_data = json.loads(response.text)
-                print(response.text, response.status_code)
+                #print(response.text, response.status_code)
                 if response.status_code != 200:
                     print("ERROR:", response.text, attempts)
                     attempts = attempts + 1
@@ -133,9 +140,9 @@ class Parser(object):
         # by a lower priority use case.
         #
         # 1) keyword ~= DB_start_url && keyword contains additional query parameters
-        # 2) filename == DB_keyword && keyword ~= DB_start_url
-        # 3) filename == DB_keyword
-        # 4) filename ~= DB_start_url  # Since keyword may not be scrubbed, match to scrubbed keyword
+        # 2) scrubbed_keyword == DB_keyword && keyword ~= DB_start_url
+        # 3) scrubbed_keyword == DB_keyword
+        # 4) scrubbed_keyword ~= DB_start_url  # Since keyword may not be scrubbed, match to scrubbed keyword
         priority = 100
 
         for index in range(len(self.__crawlers_data)):
@@ -206,6 +213,10 @@ class Parser(object):
         keyword_trimmed = self.__decode(keyword)
         return keyword_trimmed
 
+    def __set_data_frame(self):
+        p_results_file = "s3://ipshark-test-temp/input/DHGate.csv"
+        self.__df= pd.read_csv(p_results_file)
+        return self.__df
 
     def __get_searchkey_columns(self):
         """
@@ -213,7 +224,7 @@ class Parser(object):
         e.g., DHGate: searchkey, searchkey2
                Aliexpress: searchkey
         """
-        df = pd.read_csv(self.__results_file)
+        df = self.__df
         column_names = list(df.columns.values)
         searchkey_list = []
         for column_name in column_names:
@@ -227,9 +238,11 @@ class Parser(object):
         Drop data rows with "" or "Nan" values in the searchkey
         """
         nan_value = float("NaN")
-        dataframe = pd.read_csv(self.__results_file)
+        p_results_file = "s3://ipshark-test-temp/input/DHGate.csv"
+        dataframe = pd.read_csv(p_results_file)
         dataframe.replace("", nan_value, inplace=True)
         dataframe.dropna(subset = [searchkey_name], inplace=True)
+        print (searchkey_name)
         return dataframe[searchkey_name].unique()
 
 
@@ -243,31 +256,45 @@ class Parser(object):
         keyword_list = []
         for searchkey in searchkey_list:
             keyword_list.extend(list(self.__find_unique_searchkey(searchkey)))
+            print(list(self.__find_unique_searchkey(searchkey)))
 
+        print ("generate: ", keyword_list)
         # keywords are not scrubbed in this case. i.e., we want the keyword list
         # to remain in its raw form for easier filtering later on.
         keyword_map = {}
         for keyword in keyword_list:
             keyword_map[keyword] = 1
         keyword_list = list(keyword_map.keys())
-        # print ("generate: ", keyword_list)
+
         return keyword_list
 
-    def __get_header(self):
+    def __get_header(self, p_results_file):
         """
         First line is read from the raw results file and used as the headerline
         for the individual parsed files.
         """
-        f = open(self.__results_file, 'r')
-        header = f.readline()
-        f.close()
+        if self.__is_s3_bucket:
+            bucket = 'ipshark-test-temp' # already created on S3
+            s3_resource = boto3.resource('s3')
+            obj = s3_resource.Object(bucket, "input/DHGate.csv")
+            header = obj.get()['Body']._raw_stream.readline()
+        else:
+            f = open(self.__results_file, 'r')
+            header = f.readline()
+            f.close()
         return header
 
-    def __generate_file(self):
-        headerline = self.__get_header()
-        processed_file = open(self.p_results_file, "w")
-        processed_file.write(headerline)
-        processed_file.close()
+    def __generate_file(self, p_results_file):
+        headerline = self.__get_header(p_results_file)
+        if self.__is_s3_bucket:
+            bucket = 'ipshark-test-temp' # already created on S3
+            s3_resource = boto3.resource('s3')
+            s3_resource.Object(bucket, "input/DHGate.csv").put(Body=headerline)
+        else:
+            print("Adding To file")
+            processed_file = open(p_results_file, "w")
+            processed_file.write(headerline)
+            processed_file.close()
 
 
     def filter(self, dataframe):
@@ -290,33 +317,45 @@ class Parser(object):
         # searchkey capture is not exact and often relies on proper parsing/scrubbing
         # of the values found in the URLs.
         keyword_list = self.__generate_keywords_list()
+        print("Keyword list:", keyword_list)
 
         for keyword in keyword_list:
             scrubbed_keyword = self.scrub(keyword)
 
             print("creating files:", scrubbed_keyword, keyword)
-            self.p_results_file = self.__p_results_dir + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+            if self.__is_s3_bucket:
+                p_results_file = self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+            else:
+                p_results_file = self.__p_results_dir + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+                print("Get Run Token:", p_results_file)
 
             # If file does not exist, then need to create a new file with header
             # row.
-            if not os.path.isfile(self.p_results_file):
-                self.__generate_file()
+            if not os.path.isfile(p_results_file):
+                self.__generate_file(p_results_file)
 
             # traverse through all the searchkeys to determine which rows to append
             # into split files.
             searchkey_list = self.__get_searchkey_columns()
 
             for searchkey_name in searchkey_list:
-                df = pd.read_csv(self.__results_file)
-
+                df = self.__df
                 df = self.filter(df)
 
                 # Apply filter condition based on original searchkey value
                 df = df[df[searchkey_name] == keyword]
-
                 # Output of seachkey values must be put into the corresponding filename
-                df.to_csv(self.p_results_file, mode='a', header=False, index=False)
+                if self.__is_s3_bucket:
+                    bucket = 'ipshark-test-temp' # already created on S3
+                    csv_buffer = StringIO()
+                    df.to_csv(csv_buffer)
+                    s3_resource = boto3.resource('s3')
 
+                    # how do i know if header info got in there.
+                    s3_resource.Object(bucket, 'output/' + p_results_file).put(Body=csv_buffer.getvalue())
+                else:
+                    print("Adding To file")
+                    df.to_csv(p_results_file, mode='a', header=False, index=False)
 
     def parse_results(self):
         """
@@ -330,12 +369,12 @@ class Parser(object):
         # crawlers_data (i.e., crawler_id is needed to obtain crawlers_data)
         self.__set_crawler_id()         # self.__platform required
         self.__set_crawlers_data()      # self.__crawler_id required
+        self.__set_data_frame()         # self.__df required
 
         # Make the results directory
         if not os.path.exists(self.__p_results_dir):
             os.makedirs(self.__p_results_dir)
 
-        #self.__generate_files()
         self.__insert_rows()
 
         return
