@@ -8,10 +8,10 @@ import re
 import pandas as pd
 import json
 import requests
-import boto3
-import s3fs
-from io import StringIO
-
+sys.path.append('../')
+from common.storage import StorageSystem
+from common.filesystem import FileSystem
+from common.bucket import Bucket
 
 class Parser(object):
     """Parser for Octoparse results.
@@ -27,14 +27,16 @@ class Parser(object):
     their own individual files with the naming convention as follows:
     <timestamp>_<crawlerId>_<assetId>_<keywordId>_<keyword(s)>.csv
     """
-    __results_file = ''
-    __p_results_dir = ''
     __platform = ''
     __timestamp = ''
     __crawler_id = 0          # Caches crawlerId from API Call
     __crawlers_data = None    # Caches all keywords & start_urls from API Call
     __is_s3_bucket = False    # Determines if input & output files/dir are s3 buckets
-    __df = None               # pandas Data Frame
+
+    __storage_system = FileSystem()
+    AWS_S3_BUCKET = "s3://ipshark-test-temp"
+    CRAWLERS_API = "https://51lb672yhd.execute-api.us-east-2.amazonaws.com/dev/crawlers"
+    CRAWLER_ID_API = "https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id="
 
     def __init__(self, argv):
 
@@ -50,42 +52,63 @@ class Parser(object):
             elif opt in ("-p", "--platform"):
                 self.__platform = arg
             elif opt in ("-i", "--results_file"):
-                self.__results_file = arg
+                self.__storage_system.set_input_file(arg)
             elif opt in ("-o", "--processed_results_dir"):
-                self.__p_results_dir = arg
-                # Make sure the results directory ends in "/"
-                if self.__p_results_dir.rfind("\/") != len(self.__p_results_dir):
-                    self.__p_results_dir = self.__p_results_dir + "/"
-                    print(self.__p_results_dir)
+                self.__storage_system.set_output_dir(arg)
             elif opt in ("-b"):
                 self.__is_s3_bucket = True
+                self.__storage_system = Bucket()
 
-        if (self.__results_file == '' or self.__p_results_dir == '' or self.__platform == ''):
+
+        if (self.__storage_system.get_input_file() == '' or
+            self.__storage_system.get_output_dir() == '' or
+            self.__platform == ''):
+            print(self.__storage_system.get_input_file(),self.__storage_system.get_output_dir(),self.__platform)
             print('parse_results.py [-h] [-b] -i <raw inputfile> -o <output directory> -p <platform>')
             sys.exit(2)
 
-        print('Output directory is: ', self.__p_results_dir)
+        print('Output directory is: ', self.__storage_system.get_output_dir())
         print('Platform is: ', self.__platform)
-        print('Input file/directory is: ', self.__results_file)
+        print('Input file/directory is: ', self.__storage_system.get_input_file())
+        print("Storage System:", type(self.__storage_system))
 
     def execute(self):
         """
         Main Function to execute parse_results.
         """
-        print("Main Function: ", self.__results_file, self.__p_results_dir, self.__platform)
+        print("Main Function: ", self.__storage_system.get_input_file(), self.__storage_system.get_output_dir(), self.__platform)
         #try:
-        if os.path.isdir(self.__results_file):
-            print('Raw directory is: ', self.__results_file)
-            results_dir = self.__results_file
-            for results_filename in os.listdir(results_dir):
-                if results_dir.rfind("\/") != len(results_dir):
-                    #results_dir = results_dir + "/"
-                    print(results_dir)
-                    self.__results_file = results_dir + results_filename
-                    print('Raw file is: ', self.__results_file)
-                    self.parse_results()
+
+        if self.__storage_system.is_directory(self.__storage_system.get_input_file()):
+            self.__storage_system.set_input_dir(self.__storage_system.get_input_file())
+            results_file_list = self.__storage_system.get_input_file_list()
+            for results_filename in results_file_list:
+                """
+                Currently will only be set to directory in filesystem case.
+                Need to adjust for S3 Bucket still
+                """
+                print(results_file_list)
+                self.__storage_system.set_input_file(self.__storage_system.get_input_dir() + results_filename)
+
+                # Data Frame is set on a per input file basis.
+                self.__storage_system.set_dataframe(self.__storage_system.get_input_dir() + results_filename)         # self.__df required
+                print('Raw file is: ', self.__storage_system.get_input_file())
+                self.parse_results()
+
+        # if os.path.isdir(self.__results_file):
+        #     print('Raw directory is: ', self.__results_file)
+        #     results_dir = self.__results_file
+        #     for results_filename in os.listdir(results_dir):
+        #         if results_dir.rfind("\/") != len(results_dir):
+        #             #results_dir = results_dir + "/"
+        #             print(results_dir)
+        #             self.__results_file = results_dir + results_filename
+        #             print('Raw file is: ', self.__results_file)
+        #             self.parse_results()
         else:
-            print('Raw file is: ', self.__results_file)
+            print('Raw file is: ', self.__storage_system.get_input_file())
+            # Data Frame is set on a per input file basis.
+            self.__storage_system.set_dataframe(self.__storage_system.get_input_file())
             self.parse_results()
 
     def __set_crawler_id (self):
@@ -94,7 +117,7 @@ class Parser(object):
         """
         crawler_id = 0
         if self.__crawler_id == 0:
-            response = requests.get("https://51lb672yhd.execute-api.us-east-2.amazonaws.com/dev/crawlers")
+            response = requests.get(self.CRAWLERS_API)
             crawlers_data = json.loads(response.text)
             for crawler in crawlers_data:
                 if str(crawler["platform"]) == self.__platform:
@@ -111,7 +134,7 @@ class Parser(object):
             attempts = 0
             max_attempts = 3
             while attempts < max_attempts:
-                response = requests.get("https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=" + str(self.__crawler_id))
+                response = requests.get(self.CRAWLER_ID_API + str(self.__crawler_id))
                 self.__crawlers_data = json.loads(response.text)
                 #print(response.text, response.status_code)
                 if response.status_code != 200:
@@ -213,10 +236,6 @@ class Parser(object):
         keyword_trimmed = self.__decode(keyword)
         return keyword_trimmed
 
-    def __set_data_frame(self):
-        p_results_file = "s3://ipshark-test-temp/input/DHGate.csv"
-        self.__df= pd.read_csv(p_results_file)
-        return self.__df
 
     def __get_searchkey_columns(self):
         """
@@ -224,7 +243,7 @@ class Parser(object):
         e.g., DHGate: searchkey, searchkey2
                Aliexpress: searchkey
         """
-        df = self.__df
+        df = self.__storage_system.get_dataframe()
         column_names = list(df.columns.values)
         searchkey_list = []
         for column_name in column_names:
@@ -238,13 +257,11 @@ class Parser(object):
         Drop data rows with "" or "Nan" values in the searchkey
         """
         nan_value = float("NaN")
-        p_results_file = "s3://ipshark-test-temp/input/DHGate.csv"
-        dataframe = pd.read_csv(p_results_file)
+        dataframe = self.__storage_system.get_dataframe()
         dataframe.replace("", nan_value, inplace=True)
         dataframe.dropna(subset = [searchkey_name], inplace=True)
         print (searchkey_name)
         return dataframe[searchkey_name].unique()
-
 
     def __generate_keywords_list(self):
         """
@@ -268,33 +285,33 @@ class Parser(object):
 
         return keyword_list
 
-    def __get_header(self, p_results_file):
-        """
-        First line is read from the raw results file and used as the headerline
-        for the individual parsed files.
-        """
-        if self.__is_s3_bucket:
-            bucket = 'ipshark-test-temp' # already created on S3
-            s3_resource = boto3.resource('s3')
-            obj = s3_resource.Object(bucket, "input/DHGate.csv")
-            header = obj.get()['Body']._raw_stream.readline()
-        else:
-            f = open(self.__results_file, 'r')
-            header = f.readline()
-            f.close()
-        return header
+    # def __get_header(self, p_results_file):
+    #     """
+    #     First line is read from the raw results file and used as the headerline
+    #     for the individual parsed files.
+    #     """
+    #     if self.__is_s3_bucket:
+    #         bucket = 'ipshark-test-temp' # already created on S3
+    #         s3_resource = boto3.resource('s3')
+    #         obj = s3_resource.Object(bucket, "input/DHGate.csv")
+    #         header = obj.get()['Body']._raw_stream.readline()
+    #     else:
+    #         f = open(self.__results_file, 'r')
+    #         header = f.readline()
+    #         f.close()
+    #     return header
 
-    def __generate_file(self, p_results_file):
-        headerline = self.__get_header(p_results_file)
-        if self.__is_s3_bucket:
-            bucket = 'ipshark-test-temp' # already created on S3
-            s3_resource = boto3.resource('s3')
-            s3_resource.Object(bucket, "input/DHGate.csv").put(Body=headerline)
-        else:
-            print("Adding To file")
-            processed_file = open(p_results_file, "w")
-            processed_file.write(headerline)
-            processed_file.close()
+    # def __generate_file(self, p_results_file):
+    #     headerline = self.__storage_system.read_header(p_results_file)
+    #     if self.__is_s3_bucket:
+    #         bucket = 'ipshark-test-temp' # already created on S3
+    #         s3_resource = boto3.resource('s3')
+    #         s3_resource.Object(bucket, "input/DHGate.csv").put(Body=headerline)
+    #     else:
+    #         print("Adding To file")
+    #         processed_file = open(p_results_file, "w")
+    #         processed_file.write(headerline)
+    #         processed_file.close()
 
 
     def filter(self, dataframe):
@@ -326,36 +343,27 @@ class Parser(object):
             if self.__is_s3_bucket:
                 p_results_file = self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
             else:
-                p_results_file = self.__p_results_dir + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
-                print("Get Run Token:", p_results_file)
+                p_results_file = self.__storage_system.get_output_dir() + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+            print("Get Run Token:", p_results_file)
 
             # If file does not exist, then need to create a new file with header
             # row.
-            if not os.path.isfile(p_results_file):
-                self.__generate_file(p_results_file)
+            self.__storage_system.generate_file(p_results_file)
 
             # traverse through all the searchkeys to determine which rows to append
             # into split files.
             searchkey_list = self.__get_searchkey_columns()
 
             for searchkey_name in searchkey_list:
-                df = self.__df
+                df = self.__storage_system.get_dataframe()
                 df = self.filter(df)
 
                 # Apply filter condition based on original searchkey value
                 df = df[df[searchkey_name] == keyword]
                 # Output of seachkey values must be put into the corresponding filename
-                if self.__is_s3_bucket:
-                    bucket = 'ipshark-test-temp' # already created on S3
-                    csv_buffer = StringIO()
-                    df.to_csv(csv_buffer)
-                    s3_resource = boto3.resource('s3')
+                self.__storage_system.insert_rows(df,p_results_file)
 
-                    # how do i know if header info got in there.
-                    s3_resource.Object(bucket, 'output/' + p_results_file).put(Body=csv_buffer.getvalue())
-                else:
-                    print("Adding To file")
-                    df.to_csv(p_results_file, mode='a', header=False, index=False)
+                #df.to_csv(p_results_file, mode='a', header=False, index=False)
 
     def parse_results(self):
         """
@@ -369,11 +377,6 @@ class Parser(object):
         # crawlers_data (i.e., crawler_id is needed to obtain crawlers_data)
         self.__set_crawler_id()         # self.__platform required
         self.__set_crawlers_data()      # self.__crawler_id required
-        self.__set_data_frame()         # self.__df required
-
-        # Make the results directory
-        if not os.path.exists(self.__p_results_dir):
-            os.makedirs(self.__p_results_dir)
 
         self.__insert_rows()
 
