@@ -50,6 +50,8 @@ class Bucket(StorageSystem):
         self.__df= pd.read_csv("s3://" + self.AWS_S3_BUCKET + "/" + filename)
 
     def get_dataframe(self):
+        #print ("GETTING DataFrame", self.__df)
+        self.__df= pd.read_csv("s3://" + self.AWS_S3_BUCKET + "/" + self.__input_file)
         return self.__df
 
     def is_directory(self, directory_name):

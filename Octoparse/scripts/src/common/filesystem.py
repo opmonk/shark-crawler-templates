@@ -53,6 +53,8 @@ class FileSystem(StorageSystem):
         self.__df = pd.read_csv(filename)
 
     def get_dataframe(self):
+        #print ("GETTING DataFrame", self.__df)
+        self.__df = pd.read_csv(self.__input_file)
         return self.__df
 
     def is_directory(self, directory_name):
