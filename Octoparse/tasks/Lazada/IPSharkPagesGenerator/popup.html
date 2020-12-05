@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Popup</title>
+    <link href="popup.css" rel="stylesheet">
+    <script src="popup.js"></script>
+  </head>
+  <body>
+    <!--h1>Aliexpress Crawler</h1-->
+    <br/>
+    <div role="main">
+      <form>
+        <label for="api">API </label>
+        <br/>
+        <!--input type="text" name="api" id="api" value="https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=14"--> 
+        <select name="api" id="api">
+          <option value="https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=14--https://www.lazada.com.my/catalog/?catId=0&q=">LazadaMY</option>
+          <option value="https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=15--https://www.lazada.co.id/catalog/?catId=0&q=">LazadaID</option>
+        </select>
+        <br/>
+        <br/>
+
+        <label for="max">Max Page </label>
+        <br/>
+        <input type="number" name="maxPage" id="maxPage" value="60" min="10" max="100">
+         <br/>
+          <br/>
+        <button id="button">Start</button>
+        <!--div for="label" style="visibility: visible;" id="label">please don't close extension</div-->
+        <br/>
+
+      </form>
+
+    </div>
+  </body>
+</html>

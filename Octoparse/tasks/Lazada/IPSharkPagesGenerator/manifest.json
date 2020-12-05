@@ -1,0 +1,26 @@
+{
+  "name" : "IPShark Pages Generator",
+  "version" : "1.0",
+  "description" : "A page generator (lazada for now).",
+  "permissions": ["tabs",
+                  "*://*/*",
+                  "management"],
+  "browser_action": {
+     "default_icon": "icon.png",
+     "default_popup": "popup.html"
+  },
+  /*"content_scripts": [
+        {
+          "matches": [
+            "http://*.aliexpress.com/w/",
+            "https://*.aliexpress.com/w/"
+          ],
+          "js": ["content.js"]
+        }
+  ],*/
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": true
+  },
+  "manifest_version": 2
+}
