@@ -8,7 +8,10 @@ import re
 import pandas as pd
 import json
 import requests
-
+sys.path.append('../')
+from common.storage import StorageSystem
+from common.filesystem import FileSystem
+from common.bucket import Bucket
 
 class Parser(object):
     """Parser for Octoparse results.
@@ -24,94 +27,135 @@ class Parser(object):
     their own individual files with the naming convention as follows:
     <timestamp>_<crawlerId>_<assetId>_<keywordId>_<keyword(s)>.csv
     """
-    results_file = ''
-    p_results_dir = ''
-    platform = ''
-    timestamp = ''
+    __platform = ''
+    __timestamp = ''
+    __crawler_id = 0          # Caches crawlerId from API Call
+    __crawlers_data = None    # Caches all keywords & start_urls from API Call
+    __is_s3_bucket = False    # Determines if input & output files/dir are s3 buckets
+
+    __storage_system = FileSystem()
+    AWS_S3_BUCKET = "s3://ipshark-test-temp"
+    CRAWLERS_API = "https://51lb672yhd.execute-api.us-east-2.amazonaws.com/dev/crawlers"
+    CRAWLER_ID_API = "https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id="
 
     def __init__(self, argv):
 
         try:
-            opts, args = getopt.getopt(argv,"hp:i:o:",["platform=","results_file=","p_results_dir="])
+            opts, args = getopt.getopt(argv,"bhp:i:o:",["platform=","results_file=","p_results_dir="])
         except getopt.GetoptError:
-            print('parse_results.py -p <platform> -i <raw inputfile> -o <output directory> -p <platform>')
+            print('parse_results.py [-h] [-b] -i <raw inputfile> -o <output directory> -p <platform>')
             sys.exit(2)
         for opt, arg in opts:
             if opt == '-h':
-                print('parse_results.py -i <raw inputfile> -o <output directory> -p <platform>')
+                print('parse_results.py [-h] [-b] -i <raw inputfile> -o <output directory> -p <platform>')
                 sys.exit()
             elif opt in ("-p", "--platform"):
-                self.platform = arg
+                self.__platform = arg
             elif opt in ("-i", "--results_file"):
-                self.results_file = arg
+                self.__storage_system.set_input_file(arg)
             elif opt in ("-o", "--processed_results_dir"):
-                self.p_results_dir = arg
-                # Make sure the results directory ends in "/"
-                if self.p_results_dir.rfind("\/") != len(self.p_results_dir):
-                    self.p_results_dir = self.p_results_dir + "/"
-                    print(self.p_results_dir)
+                self.__storage_system.set_output_dir(arg)
+            elif opt in ("-b"):
+                self.__is_s3_bucket = True
+                self.__storage_system = Bucket()
 
-        if (self.results_file == '' or self.p_results_dir == '' or self.platform == ''):
-            print('parse_results.py -i <raw inputfile> -o <output directory> -p <platform>')
+
+        if (self.__storage_system.get_input_file() == '' or
+            self.__storage_system.get_output_dir() == '' or
+            self.__platform == ''):
+            print(self.__storage_system.get_input_file(),self.__storage_system.get_output_dir(),self.__platform)
+            print('parse_results.py [-h] [-b] -i <raw inputfile> -o <output directory> -p <platform>')
             sys.exit(2)
 
-        print('Output directory is: ', self.p_results_dir)
-        print('Platform is: ', self.platform)
-        print('Input file/directory is: ', self.results_file)
+        print('Output directory is: ', self.__storage_system.get_output_dir())
+        print('Platform is: ', self.__platform)
+        print('Input file/directory is: ', self.__storage_system.get_input_file())
+        print("Storage System:", type(self.__storage_system))
 
     def execute(self):
         """
         Main Function to execute parse_results.
         """
-        print("Main Function: ", self.results_file, self.p_results_dir, self.platform)
+        print("Main Function: ", self.__storage_system.get_input_file(), self.__storage_system.get_output_dir(), self.__platform)
         #try:
-        if os.path.isdir(self.results_file):
-            print('Raw directory is: ', self.results_file)
-            results_dir = self.results_file
-            for results_filename in os.listdir(results_dir):
-                if results_dir.rfind("\/") != len(results_dir):
-                    #results_dir = results_dir + "/"
-                    print(results_dir)
-                    self.results_file = results_dir + results_filename
-                    print('Raw file is "', self.results_file)
-                    self.parse_results()
+
+        if self.__storage_system.is_directory(self.__storage_system.get_input_file()):
+            self.__storage_system.set_input_dir(self.__storage_system.get_input_file())
+            results_file_list = self.__storage_system.get_input_file_list()
+            for results_filename in results_file_list:
+                """
+                Currently will only be set to directory in filesystem case.
+                Need to adjust for S3 Bucket still
+                """
+                print(results_file_list)
+                self.__storage_system.set_input_file(self.__storage_system.get_input_dir() + results_filename)
+
+                # Data Frame is set on a per input file basis.
+                self.__storage_system.set_dataframe(self.__storage_system.get_input_dir() + results_filename)         # self.__df required
+                print('Raw file is: ', self.__storage_system.get_input_file())
+                self.parse_results()
+
+        # if os.path.isdir(self.__results_file):
+        #     print('Raw directory is: ', self.__results_file)
+        #     results_dir = self.__results_file
+        #     for results_filename in os.listdir(results_dir):
+        #         if results_dir.rfind("\/") != len(results_dir):
+        #             #results_dir = results_dir + "/"
+        #             print(results_dir)
+        #             self.__results_file = results_dir + results_filename
+        #             print('Raw file is: ', self.__results_file)
+        #             self.parse_results()
         else:
-            print('Raw file is "', self.results_file)
+            print('Raw file is: ', self.__storage_system.get_input_file())
+            # Data Frame is set on a per input file basis.
+            self.__storage_system.set_dataframe(self.__storage_system.get_input_file())
             self.parse_results()
 
-    def __get_crawler_id (self):
+    def __set_crawler_id (self):
         """
-        This function needs to be replaced with API call to Admin tool
+        Call to API should only occur 1 time, check if it exists first.
         """
         crawler_id = 0
+        if self.__crawler_id == 0:
+            response = requests.get(self.CRAWLERS_API)
+            crawlers_data = json.loads(response.text)
+            for crawler in crawlers_data:
+                if str(crawler["platform"]) == self.__platform:
+                    self.__crawler_id = crawler["id"]
+                    print ("crawler_id set to: ", self.__crawler_id)
 
-        if (self.platform.lower() == 'aliexpress'):
-            crawler_id = 11
-        elif (self.platform.lower() == 'dhgate'):
-            crawler_id = 8
-        elif (self.platform.lower() == 'bukalapak'):
-            crawler_id = 10
-        elif (self.platform.lower() == 'lazadacommy'):
-            crawler_id = 14
-        elif (self.platform.lower() == 'lazadacoid'):
-            crawler_id = 15
-        return crawler_id
+        # Make sure platform is found in API call
+        if self.__crawler_id == 0:
+            print ("ERROR:", self.__platform, "does not exist in Admin Tool", )
+            sys.exit(2)
+
+    def __set_crawlers_data(self):
+        if not bool(self.__crawlers_data):
+            attempts = 0
+            max_attempts = 3
+            while attempts < max_attempts:
+                response = requests.get(self.CRAWLER_ID_API + str(self.__crawler_id))
+                self.__crawlers_data = json.loads(response.text)
+                #print(response.text, response.status_code)
+                if response.status_code != 200:
+                    print("ERROR:", response.text, attempts)
+                    attempts = attempts + 1
+                else:
+                    attempts = max_attempts
+
+                if response.status_code != 200 and attempts == max_attempts:
+                    print("EXITING:", response.text, attempts)
+                    sys.exit(2)
 
 
-    def __get_run_token(self, filename_keyword, keyword):
+    def __get_run_token(self, scrubbed_keyword, keyword):
         """
         Run token for file naming convention is as follows:
         <timestamp>_<crawlerId>_<assetId>_<keywordId>_<keyword(s)>
-        filename_keyword & keyword are needed to generate the right run_token.
+        scrubbed_keyword & keyword are needed to generate the right run_token.
         the keyword will need to be matched to the start_url found in the crawler
         table in the Admin Tool
         """
-
-        crawler_id = self.__get_crawler_id()
-        # print (str(crawler_id))
-        response = requests.get("https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id=" + str(crawler_id))
-        json_db_crawl_data = json.loads(response.text)
-
         keyword_id = ""
         asset_id = ""
         # priority is assigned for each use case as follows (in order of highest to lowest priority).
@@ -119,53 +163,47 @@ class Parser(object):
         # by a lower priority use case.
         #
         # 1) keyword ~= DB_start_url && keyword contains additional query parameters
-        # 2) filename == DB_keyword && keyword ~= DB_start_url
-        # 3) filename == DB_keyword
-        # 4) filename ~= DB_start_url  # Since keyword may not be scrubbed, match to scrubbed keyword
+        # 2) scrubbed_keyword == DB_keyword && keyword ~= DB_start_url
+        # 3) scrubbed_keyword == DB_keyword
+        # 4) scrubbed_keyword ~= DB_start_url  # Since keyword may not be scrubbed, match to scrubbed keyword
         priority = 100
-        #print (response.text)
-        for crawl_data in json_db_crawl_data:
 
-            _filename = self.scrub_keyword(filename_keyword)
-            _keyword = keyword.lower()
+        for index in range(len(self.__crawlers_data)):
+            _db_keyword = self.__encode(self.__crawlers_data[index]["keyword"])
+            _db_start_url = self.__encode(self.__crawlers_data[index]["start_url"])
 
-            _db_keyword = self.encode_keyword(crawl_data["keyword"])
-            _db_start_url = self.encode_keyword(crawl_data["start_url"])
-
-            #print ("List:", priority, _keyword, _filename, _db_start_url, _db_keyword, _db_start_url.find(_keyword))
-
-            if (_db_start_url.find(_keyword) != -1 and _keyword.find('&') != -1):
+            if (_db_start_url.find(keyword) != -1 and keyword.find('&') != -1):
                 priority = 1
-                print ("Priority2:", priority, _keyword, _filename, _db_start_url, _db_keyword)
-                keyword_id = crawl_data["keyword_id"]
-                asset_id = crawl_data["asset_id"]
-            elif (_db_keyword == _filename and _db_start_url.find(_keyword) != -1 and priority > 1):
+                print ("Priority1:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
+                keyword_id = self.__crawlers_data[index]["keyword_id"]
+                asset_id = self.__crawlers_data[index]["asset_id"]
+            elif (_db_keyword == scrubbed_keyword and _db_start_url.find(keyword) != -1 and priority > 1):
                 priority = 2
-                print ("Priority1:", priority, _keyword, _filename, _db_start_url, _db_keyword)
-                keyword_id = crawl_data["keyword_id"]
-                asset_id = crawl_data["asset_id"]
-            elif (_db_keyword == _filename and priority > 2):
+                print ("Priority2:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
+                keyword_id = self.__crawlers_data[index]["keyword_id"]
+                asset_id = self.__crawlers_data[index]["asset_id"]
+            elif (_db_keyword == scrubbed_keyword and priority > 2):
                 priority = 3
-                print ("Priority3:", priority, _keyword, _filename, _db_start_url, _db_keyword)
-                keyword_id = crawl_data["keyword_id"]
-                asset_id = crawl_data["asset_id"]
-            elif (_db_start_url.find(_filename) != -1 and priority > 3):
+                print ("Priority3:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
+                keyword_id = self.__crawlers_data[index]["keyword_id"]
+                asset_id = self.__crawlers_data[index]["asset_id"]
+            elif (_db_start_url.find(scrubbed_keyword) != -1 and priority > 3):
                 priority = 4
-                print ("Priority4:", priority, _keyword, _filename, _db_start_url, _db_keyword)
-                keyword_id = crawl_data["keyword_id"]
-                asset_id = crawl_data["asset_id"]
-            elif (json_db_crawl_data[-1] == crawl_data and priority == 100):
+                print ("Priority4:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword)
+                keyword_id = self.__crawlers_data[index]["keyword_id"]
+                asset_id = self.__crawlers_data[index]["asset_id"]
+            elif (self.__crawlers_data[-1] == self.__crawlers_data[index] and priority == 100):
                 # This is the last element in the json object and no use case was found
-                print ("Priority 100:", priority, _keyword, _filename, _db_start_url, _db_keyword, _db_start_url.find(_keyword))
+                print ("Priority 100:", priority, keyword, scrubbed_keyword, _db_start_url, _db_keyword, _db_start_url.find(keyword))
 
-
-        run_token = str(self.timestamp) + "_" + str(crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + filename_keyword
+        run_token = str(self.__timestamp) + "_" + str(self.__crawler_id) + "_" + str(asset_id) + "_" + str(keyword_id) + "_" + scrubbed_keyword
         return run_token
 
-    def encode_keyword(self, keyword):
+    def __encode(self, keyword):
         """
-        Keywords are stored with spaces.  So need to encode to ensure proper
-        comparison with start_urls
+        API calls to Database contains keywords that are stored with spaces.
+        So need to encode keywords to ensure proper comparison with
+        Octoparse results.
         """
         # _ (space) = '+' (needed for keyword comparisons in **json API**)
         keyword_trimmed = re.sub(r' ','+', keyword)
@@ -175,35 +213,37 @@ class Parser(object):
         keyword_trimmed = keyword_trimmed.lower()
         return keyword_trimmed
 
-    def __get_header(self):
-        f = open(self.results_file, 'r')
-        header = f.readline()
-        f.close()
-        return header
-
-    def scrub_keyword(self, keyword):
+    def __decode(self, keyword):
         """
-        Cleanse/Standardize the keyword for easier comparison to those stored
-        in IPShark Admin tool (i.e., start_urls & keyword).
-
-        Args:
-        keyword - raw searchkey parameter
+        Octoparse results set needs to be decoded.
         """
         # Character encodings:
         # %20 (space) = '+' (needed for filenaming conventions)
         keyword_trimmed = re.sub(r'%20','+', keyword)
         # %21 = !
         keyword_trimmed = re.sub(r'%21','!', keyword_trimmed)
-
-        # lower case all the words
         keyword_trimmed = keyword_trimmed.lower()
         return keyword_trimmed
 
-    # finds all the searchkey columns in a given raw results file
-    # e.g., DHGate: searchkey, searchkey2
-    #       Aliexpress: searchkey
+    def scrub(self, keyword):
+        """
+        Cleanse/Standardize the keyword for easier comparison to those stored
+        in IPShark Admin tool (i.e., start_urls & keyword).  All keywords
+        will first be decoded, then it will pass through any platform
+        specific scrubbing (e.g., see scrub() method defined in
+        dhgate & aliexpress)
+        """
+        keyword_trimmed = self.__decode(keyword)
+        return keyword_trimmed
+
+
     def __get_searchkey_columns(self):
-        df = pd.read_csv(self.results_file)
+        """
+        finds all the searchkey columns in a given raw results file
+        e.g., DHGate: searchkey, searchkey2
+               Aliexpress: searchkey
+        """
+        df = self.__storage_system.get_dataframe()
         column_names = list(df.columns.values)
         searchkey_list = []
         for column_name in column_names:
@@ -212,70 +252,66 @@ class Parser(object):
         # print (searchkey_list)
         return searchkey_list
 
-    # Drop data rows with "" or "Nan" values in the searchkey
     def __find_unique_searchkey(self, searchkey_name):
+        """
+        Drop data rows with "" or "Nan" values in the searchkey
+        """
         nan_value = float("NaN")
-        dataframe = pd.read_csv(self.results_file)
+        dataframe = self.__storage_system.get_dataframe()
         dataframe.replace("", nan_value, inplace=True)
         dataframe.dropna(subset = [searchkey_name], inplace=True)
+        print (searchkey_name)
         return dataframe[searchkey_name].unique()
 
-    # generates map of unique keywords (based on searchkey field) to come up
-    # with single filename for all variations of searchkey values
-    def __generate_file_keywords_map(self):
-        # Some platforms have multiple searchkeys.  Find all searchkeys and
-        # then filter to find unique values.
-        searchkey_list = self.__get_searchkey_columns()
-        keyword_list = []
-        for searchkey in searchkey_list:
-            keyword_list.extend(list(self.__find_unique_searchkey(searchkey)))
-
-            keyword_map = {}
-            for keyword in keyword_list:
-                keyword_map[self.scrub_keyword(keyword)] = 1
-        # print ("generate_file: ", keyword_map.keys())
-        return keyword_map
-
-    # generates list of unique searchkey field
     def __generate_keywords_list(self):
+        """
+        generates list of unique searchkey field
+        """
         # Some platforms have multiple searchkeys.  Find all searchkeys and
         # then filter to find unique values.
         searchkey_list = self.__get_searchkey_columns()
         keyword_list = []
         for searchkey in searchkey_list:
             keyword_list.extend(list(self.__find_unique_searchkey(searchkey)))
+            print(list(self.__find_unique_searchkey(searchkey)))
 
+        print ("generate: ", keyword_list)
         # keywords are not scrubbed in this case. i.e., we want the keyword list
         # to remain in its raw form for easier filtering later on.
         keyword_map = {}
         for keyword in keyword_list:
             keyword_map[keyword] = 1
         keyword_list = list(keyword_map.keys())
-        # print ("generate: ", keyword_list)
+
         return keyword_list
 
-    def __generate_files(self):
-        """
-        This function generates the initial filename with the headerline.
-        Note: multiple searchkey values can fall into the same filename.
-        This depends on how the searchkey values are captured in Octoparse.
-        e.g., In DHGate, pagination often strips away some of the page_url
-        query parameters, etc.
-        """
-        headerline = self.__get_header()
+    # def __get_header(self, p_results_file):
+    #     """
+    #     First line is read from the raw results file and used as the headerline
+    #     for the individual parsed files.
+    #     """
+    #     if self.__is_s3_bucket:
+    #         bucket = 'ipshark-test-temp' # already created on S3
+    #         s3_resource = boto3.resource('s3')
+    #         obj = s3_resource.Object(bucket, "input/DHGate.csv")
+    #         header = obj.get()['Body']._raw_stream.readline()
+    #     else:
+    #         f = open(self.__results_file, 'r')
+    #         header = f.readline()
+    #         f.close()
+    #     return header
 
-        file_keyword_list = list(self.__generate_file_keywords_map().keys())
-        for filename_keyword in list(file_keyword_list):
-            self.p_results_file = self.p_results_dir + self.__get_run_token(filename_keyword, filename_keyword) + ".csv"
-            processed_file = open(self.p_results_file, "w")
-            processed_file.write(headerline)
-            processed_file.close()
-
-    def __generate_file(self):
-        headerline = self.__get_header()
-        processed_file = open(self.p_results_file, "w")
-        processed_file.write(headerline)
-        processed_file.close()
+    # def __generate_file(self, p_results_file):
+    #     headerline = self.__storage_system.read_header(p_results_file)
+    #     if self.__is_s3_bucket:
+    #         bucket = 'ipshark-test-temp' # already created on S3
+    #         s3_resource = boto3.resource('s3')
+    #         s3_resource.Object(bucket, "input/DHGate.csv").put(Body=headerline)
+    #     else:
+    #         print("Adding To file")
+    #         processed_file = open(p_results_file, "w")
+    #         processed_file.write(headerline)
+    #         processed_file.close()
 
 
     def filter(self, dataframe):
@@ -298,47 +334,50 @@ class Parser(object):
         # searchkey capture is not exact and often relies on proper parsing/scrubbing
         # of the values found in the URLs.
         keyword_list = self.__generate_keywords_list()
+        print("Keyword list:", keyword_list)
 
         for keyword in keyword_list:
-            filename_keyword = self.scrub_keyword(keyword)
+            scrubbed_keyword = self.scrub(keyword)
+
+            print("creating files:", scrubbed_keyword, keyword)
+            if self.__is_s3_bucket:
+                p_results_file = self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+            else:
+                p_results_file = self.__storage_system.get_output_dir() + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+            print("Get Run Token:", p_results_file)
 
             # If file does not exist, then need to create a new file with header
             # row.
-            print("creating files:", filename_keyword, keyword)
-            self.p_results_file = self.p_results_dir + self.__get_run_token(filename_keyword, keyword) + ".csv"
-
-            # This checks if the keyword & filename_keyword were mismatched.
-            if not os.path.isfile(self.p_results_file):
-                self.__generate_file()
+            self.__storage_system.generate_file(p_results_file)
 
             # traverse through all the searchkeys to determine which rows to append
             # into split files.
             searchkey_list = self.__get_searchkey_columns()
 
             for searchkey_name in searchkey_list:
-                df = pd.read_csv(self.results_file)
-
+                df = self.__storage_system.get_dataframe()
                 df = self.filter(df)
 
                 # Apply filter condition based on original searchkey value
                 df = df[df[searchkey_name] == keyword]
-
                 # Output of seachkey values must be put into the corresponding filename
-                df.to_csv(self.p_results_file, mode='a', header=False, index=False)
+                self.__storage_system.insert_rows(df,p_results_file)
 
-    ################
-    # Main function for parsing through raw results and generating individual files.
-    ################
+                #df.to_csv(p_results_file, mode='a', header=False, index=False)
+
     def parse_results(self):
+        """
+        Main function for parsing through raw results and generating individual files.
+        """
         # Get new timestamp for each file since a keyword could span
         # across 2 files (i.e., since Octoparse has max limit of 20K rows)
-        self.timestamp = int(str(time.time()).replace('.', ''))
+        self.__timestamp = int(str(time.time()).replace('.', ''))
 
-        # Make the results directory
-        if not os.path.exists(self.p_results_dir):
-            os.makedirs(self.p_results_dir)
+        # API Calls: Crawler Id needs to be set prior to setting
+        # crawlers_data (i.e., crawler_id is needed to obtain crawlers_data)
+        self.__set_crawler_id()         # self.__platform required
+        self.__set_crawlers_data()      # self.__crawler_id required
 
-        #self.__generate_files()
         self.__insert_rows()
 
         return

@@ -7,12 +7,14 @@ class AliexpressParser(Parser):
         print(isinstance(self, Parser))
         Parser.__init__(self, argv)
 
-    def scrub_keyword(self, keyword):
-        keyword_trimmed = super(AliexpressParser,self).scrub_keyword(keyword)
+    def scrub(self, keyword):
+        keyword_trimmed = super(AliexpressParser,self).scrub(keyword)
 
         # searchkey contains ltype
         keyword_trimmed = re.sub(r'&ltype.*','', keyword_trimmed)
         return keyword_trimmed
+
+
 
     def filter(self, dataframe):
         # Drop rows without an itemnumber (should this be results_url instead?)
