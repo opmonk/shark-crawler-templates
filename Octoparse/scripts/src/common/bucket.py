@@ -1,7 +1,7 @@
 import boto3
 import s3fs
 from io import StringIO
-from common.storage import StorageSystem
+from src.common.storage import StorageSystem
 import pandas as pd
 
 class Bucket(StorageSystem):

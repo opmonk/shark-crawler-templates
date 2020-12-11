@@ -1,6 +1,7 @@
 import sys
-from parser import Parser
+from src.parsers.parser import Parser
 import re
+
 
 class DHGateParser(Parser):
     def __init__(self, argv):
@@ -17,5 +18,10 @@ class DHGateParser(Parser):
 
         return keyword_trimmed
 
+def main(args):
+    #x = DHGateParser(sys.argv[0:]).execute()
+    x = DHGateParser(args[0:]).execute()
+
 if __name__=="__main__":
-    x = DHGateParser(sys.argv[1:]).execute()
+    main()
+

@@ -9,9 +9,9 @@ import pandas as pd
 import json
 import requests
 sys.path.append('../')
-from common.storage import StorageSystem
-from common.filesystem import FileSystem
-from common.bucket import Bucket
+from src.common.storage import StorageSystem
+from src.common.filesystem import FileSystem
+from src.common.bucket import Bucket
 
 class Parser(object):
     """Parser for Octoparse results.
