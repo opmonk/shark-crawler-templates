@@ -36,7 +36,8 @@ class Parser(object):
     __storage_system = FileSystem()
     AWS_S3_BUCKET = "s3://ipshark-test-temp"
     CRAWLERS_API = "https://51lb672yhd.execute-api.us-east-2.amazonaws.com/dev/crawlers"
-    CRAWLER_ID_API = "https://aahhnbypjd.execute-api.us-east-1.amazonaws.com/prod/crawls/metadata?crawler_id="
+    CRAWLER_ID_API_PREFIX = "https://43hy8cvigk.execute-api.us-east-2.amazonaws.com/production/crawlers/"
+    CRAWLER_ID_API_SUFFIX = "/metadata"
 
     def __init__(self, argv):
 
@@ -134,7 +135,7 @@ class Parser(object):
             attempts = 0
             max_attempts = 3
             while attempts < max_attempts:
-                response = requests.get(self.CRAWLER_ID_API + str(self.__crawler_id))
+                response = requests.get(self.CRAWLER_ID_API_PREFIX + str(self.__crawler_id) + self.CRAWLER_ID_API_SUFFIX)
                 self.__crawlers_data = json.loads(response.text)
                 #print(response.text, response.status_code)
                 if response.status_code != 200:
