@@ -8,10 +8,9 @@ import re
 import pandas as pd
 import json
 import requests
-sys.path.append('../')
-from common.storage import StorageSystem
-from common.filesystem import FileSystem
-from common.bucket import Bucket
+from postprocessor.common.storage import StorageSystem
+from postprocessor.common.filesystem import FileSystem
+from postprocessor.common.bucket import Bucket
 
 class Parser(object):
     """Parser for Octoparse results.
@@ -34,7 +33,6 @@ class Parser(object):
     __is_s3_bucket = False    # Determines if input & output files/dir are s3 buckets
 
     __storage_system = FileSystem()
-    AWS_S3_BUCKET = "s3://ipshark-test-temp"
     CRAWLERS_API = "https://51lb672yhd.execute-api.us-east-2.amazonaws.com/dev/crawlers"
     CRAWLER_ID_API_PREFIX = "https://43hy8cvigk.execute-api.us-east-2.amazonaws.com/production/crawlers/"
     CRAWLER_ID_API_SUFFIX = "/metadata"
@@ -96,16 +94,6 @@ class Parser(object):
                 print('Raw file is: ', self.__storage_system.get_input_file())
                 self.parse_results()
 
-        # if os.path.isdir(self.__results_file):
-        #     print('Raw directory is: ', self.__results_file)
-        #     results_dir = self.__results_file
-        #     for results_filename in os.listdir(results_dir):
-        #         if results_dir.rfind("\/") != len(results_dir):
-        #             #results_dir = results_dir + "/"
-        #             print(results_dir)
-        #             self.__results_file = results_dir + results_filename
-        #             print('Raw file is: ', self.__results_file)
-        #             self.parse_results()
         else:
             print('Raw file is: ', self.__storage_system.get_input_file())
             # Data Frame is set on a per input file basis.
@@ -285,34 +273,6 @@ class Parser(object):
         keyword_list = list(keyword_map.keys())
 
         return keyword_list
-
-    # def __get_header(self, p_results_file):
-    #     """
-    #     First line is read from the raw results file and used as the headerline
-    #     for the individual parsed files.
-    #     """
-    #     if self.__is_s3_bucket:
-    #         bucket = 'ipshark-test-temp' # already created on S3
-    #         s3_resource = boto3.resource('s3')
-    #         obj = s3_resource.Object(bucket, "input/DHGate.csv")
-    #         header = obj.get()['Body']._raw_stream.readline()
-    #     else:
-    #         f = open(self.__results_file, 'r')
-    #         header = f.readline()
-    #         f.close()
-    #     return header
-
-    # def __generate_file(self, p_results_file):
-    #     headerline = self.__storage_system.read_header(p_results_file)
-    #     if self.__is_s3_bucket:
-    #         bucket = 'ipshark-test-temp' # already created on S3
-    #         s3_resource = boto3.resource('s3')
-    #         s3_resource.Object(bucket, "input/DHGate.csv").put(Body=headerline)
-    #     else:
-    #         print("Adding To file")
-    #         processed_file = open(p_results_file, "w")
-    #         processed_file.write(headerline)
-    #         processed_file.close()
 
 
     def filter(self, dataframe):

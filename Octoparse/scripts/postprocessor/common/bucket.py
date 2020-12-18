@@ -1,7 +1,7 @@
 import boto3
 import s3fs
 from io import StringIO
-from common.storage import StorageSystem
+from postprocessor.common.storage import StorageSystem
 import pandas as pd
 
 class Bucket(StorageSystem):
@@ -11,7 +11,7 @@ class Bucket(StorageSystem):
     __output_directory = ""     # e.g "output/"
     __output_file = ""
     __df = None                 # dataframe
-    AWS_S3_BUCKET = "ipshark-test-temp"
+    AWS_S3_BUCKET = "octoparse-qa"
 
     def get_input_file(self):
         return self.__input_file

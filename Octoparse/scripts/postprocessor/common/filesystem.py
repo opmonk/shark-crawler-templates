@@ -1,4 +1,4 @@
-from common.storage import StorageSystem
+from postprocessor.common.storage import StorageSystem
 import os
 import pandas as pd
 

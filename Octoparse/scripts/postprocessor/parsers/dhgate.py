@@ -1,5 +1,5 @@
 import sys
-from parser import Parser
+from postprocessor.parsers.parser import Parser
 import re
 
 class DHGateParser(Parser):
