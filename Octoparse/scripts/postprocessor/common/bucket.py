@@ -50,7 +50,7 @@ class Bucket(StorageSystem):
         self.__df= pd.read_csv("s3://" + self.AWS_S3_BUCKET + "/" + filename)
 
     def get_dataframe(self):
-        #print ("GETTING DataFrame", self.__df)
+        print ("GETTING DataFrame", self.__input_file)
         self.__df= pd.read_csv("s3://" + self.AWS_S3_BUCKET + "/" + self.__input_file)
         return self.__df
 
@@ -76,8 +76,13 @@ class Bucket(StorageSystem):
 
     def insert_rows(self, dataframe, filename):
         csv_buffer = StringIO()
-        dataframe.to_csv(csv_buffer)
         s3_resource = boto3.resource('s3')
+        try:
+            csv_prev_content = str(s3_resource.Object(self.AWS_S3_BUCKET, self.__output_directory + filename).get()['Body'].read(), 'utf8')
+        except:
+            csv_prev_content = ''
+        dataframe.to_csv(csv_buffer, header=False, index=False)
+        csv_output = csv_prev_content + csv_buffer.getvalue()
 
         # how do i know if header info got in there.
-        s3_resource.Object(self.AWS_S3_BUCKET, self.__output_directory + filename).put(Body=csv_buffer.getvalue())
+        s3_resource.Object(self.AWS_S3_BUCKET, self.__output_directory + filename).put(Body=csv_output)

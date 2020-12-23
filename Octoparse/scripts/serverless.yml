@@ -7,6 +7,7 @@ provider:
   profile: qa		      # Name of the pre-configured AWS profile that is founnd in ~/.aws/confidentials.  TODO: Update to your profile.
   region: us-east-1	      # Name of the region to deploy all functions to. TODO: Update to your custom region.
   runtime: python3.8          # AWS Lambda runtime
+  role: arn:aws:iam::929207119037:role/ipshark-qa-lambda-role
 
 package:
   individually: true
