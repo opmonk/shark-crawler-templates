@@ -70,9 +70,21 @@ class Bucket(StorageSystem):
         return header
 
     def generate_file(self, filename):
-        headerline = self.__read_header()
+        """
+        First check if this is a new file to be generated:
+        """
         s3_resource = boto3.resource('s3')
-        s3_resource.Object(self.AWS_S3_BUCKET, self.__output_directory + filename).put(Body=headerline)
+        try:
+            csv_prev_content = str(s3_resource.Object(self.AWS_S3_BUCKET, self.__output_directory + filename).get()['Body'].read(), 'utf8')
+        except:
+            csv_prev_content = ''
+
+        # If prev content is empty, this is a new file.
+        if csv_prev_content == '':
+            headerline = self.__read_header()
+            s3_resource = boto3.resource('s3')
+            s3_resource.Object(self.AWS_S3_BUCKET, self.__output_directory + filename).put(Body=headerline)
+
 
     def insert_rows(self, dataframe, filename):
         csv_buffer = StringIO()
