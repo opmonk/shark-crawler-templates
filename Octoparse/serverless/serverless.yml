@@ -6,17 +6,40 @@ provider:
   stage: dev                  # Name of the stage, typically either dev/staging/prod (or production), this is also added to all function names. TODO: Update to your custom name.
   profile: qa		      # Name of the pre-configured AWS profile that is founnd in ~/.aws/confidentials.  TODO: Update to your profile.
   region: us-east-1	      # Name of the region to deploy all functions to. TODO: Update to your custom region.
-  runtime: python3.8          # AWS Lambda runtime
+#  runtime: python3.8          # AWS Lambda runtime
   role: arn:aws:iam::929207119037:role/ipshark-qa-lambda-role
+  # environment:
+  #   DB_HOST: ${ssm:STAGING_DB_HOST}
+  #   DB_DATABASE: ${ssm:STAGING_DB_DATABASE}
+  #   DB_USERNAME: ${ssm:STAGING_DB_USERNAME}
+  #   DB_PASSWORD: ${ssm:STAGING_DB_PASSWORD~true}
+  #   DB_PORT: ${ssm:STAGING_DB_PORT}
+  #   # LOG_LEVEL: ${ssm:STAGING_LOG_LEVEL}
+  #   CRAWLER_API_BATCH_SIZE: 100
+  #   SQS_CRAWLS_QUEUE: { Ref: StagingCrawlerQueue }
+  #   S3_OCTOPARSE_CRAWLS_BUCKET: ipshark-staging-crawls
+  #   SECRET_KEY: ${ssm:STAGING_SECRET_KEY~true}
 
 package:
   individually: true
 
 functions:
   OctoparsePostProcess:
+    runtime: python3.8
     handler: executor.main
     timeout: 900
-
+  S3OctoparseRawEventListener:
+    runtime: nodejs12.x     # https://www.serverless.com/framework/docs/providers/aws/guide/functions/
+    handler: functions/handlers.s3OctoparseRawEventListener
+    events:
+      - s3:
+          bucket: octoparse-qa
+  #        bucket: ${env:S3_OCTOPARSE_RAW_BUCKET_NAME}
+          event: s3:ObjectCreated:*
+          rules:
+            - suffix: .zip
+          existing: true      # https://www.serverless.com/framework/docs/providers/aws/events/s3/
+    timeout: 900
 plugins:
   - serverless-python-requirements
 
