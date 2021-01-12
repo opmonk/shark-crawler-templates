@@ -3,7 +3,11 @@
 'use strict';
 
 const aws = require('aws-sdk');
-
+//const zlib = require("zlib");
+const s3Unzip = require("s3-unzip");
+const s3 = new aws.S3({
+	apiVersion: '2006-03-01'
+});
 /**
  *
  * AWS S3 event handler
@@ -20,7 +24,7 @@ exports.s3OctoparseRawEventListener = async (event, context, callback) => {
 
     const promises = [];
     event.Records.forEach(record => {
-        promises.push(_processZipFile(record.s3.object.key));
+        promises.push(_processZipFile(record.s3, record.s3.object.key));
     });
 
     return Promise.all(promises)
@@ -34,21 +38,49 @@ exports.s3OctoparseRawEventListener = async (event, context, callback) => {
         });
 };
 
-function _processZipFile(key) {
+function _processZipFile(s3Client, key) {
   console.log('Received S3 Key:', key);
+
+  // Need to send file to python script for parsing.  If a zipfile,
+  // python script needs to first unzip and take as input
+
+
 	// const params = {
-  //   Bucket: "octoparse-qa"
+  //   Bucket: "octoparse-qa",
 	// 	Key: key,
 	// };
-  //
-	// return await s3.getObject(params).promise()
-	// 	 .then(async (results) => {
-  //      return new Promise((resolve, reject) => {
-  //          if (err) {
-  //              console.error('Error Creating Printing Key', err);
-  //              reject(err);
-  //          }
-  //          resolve();
-  //      });
-  //    });
+  return new s3Unzip({
+      bucket: "octoparse-qa",
+      file: key,
+      deleteOnSuccess: false,
+      verbose: false
+    }, function(err, success){
+      if (err) console.error(err, key);
+      else console.log(success, key);
+  });
+  // return await s3.getObject(params, (err, data) => {
+  //   if (err) {
+  //       console.error(err);
+  //       const message = `Error getting object ${key} from bucket ${bucket}. Make sure they exist and your bucket is in the same region as this function.`;
+  //       console.error(message);
+  //       callback(message);
+  //   } else {
+  //       zlib.unzip(data.Body, function (err, result) {
+  //           if (err) {
+  //               console.error('UNZIP PROCESSING FAILED', err);
+  //           } else {
+  //               var extractedData = result;
+  //               s3.putObject({
+  //               Bucket: "bucketName",
+  //               Key: "filename",
+  //               Body: extractedData,
+  //               ContentType: 'content-type'
+  //               }, function (err) {
+  //                    console.log('uploaded file: ' + err);
+  //               });
+  //           }
+  //       });
+  //   }
+  // });
+
 }
