@@ -28,17 +28,30 @@ functions:
     runtime: python3.8
     handler: executor.main
     timeout: 900
-  S3OctoparseRawEventListener:
+  S3OctoparseRawZipEventListener: #https://developer.aliyun.com/mirror/npm/package/s3-unzip
     runtime: nodejs12.x     # https://www.serverless.com/framework/docs/providers/aws/guide/functions/
-    handler: functions/handlers.s3OctoparseRawEventListener
+    handler: functions/handlers.s3OctoparseRawZipEventListener
     events:
       - s3:
           bucket: octoparse-qa
   #        bucket: ${env:S3_OCTOPARSE_RAW_BUCKET_NAME}
           event: s3:ObjectCreated:*
           rules:
+            - prefix: unzip-test
             - suffix: .zip
           existing: true      # https://www.serverless.com/framework/docs/providers/aws/events/s3/
+    timeout: 900
+  S3OctoparseRawCsvEventListener:
+    runtime: nodejs12.x
+    handler: functions/handlers.s3OctoparseRawCsvEventListener
+    events:
+      - s3:
+          bucket: octoparse-qa
+          event: s3:ObjectCreated:*
+          rules:
+            - prefix: unzip-test
+            - suffix: .csv
+          existing: true
     timeout: 900
 plugins:
   - serverless-python-requirements
