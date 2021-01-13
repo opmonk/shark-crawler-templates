@@ -18,6 +18,8 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+https://bitbucket.org/copperhill/s3-unzip/src/master/index.js
 */
 "use strict";
 
@@ -91,6 +93,7 @@ var decompress = function(/*String*/command, /*Function*/ cb) {
             //for each file in the zip, decompress and upload it to S3; once all are uploaded, delete the tmp zip and zip on S3
             var counter = 0;
           	zipEntries.forEach(function(zipEntry) {
+              // bchu: Currently the directory is hard-coded here.
               var newEntryName = "unzip-test/" + zipEntry.entryName;
               console.log("Unzipped Filename:", newEntryName);
               s3.upload({ Bucket: command.bucket, Key: newEntryName, Body: zipEntry.getData() }, function(err, data) {

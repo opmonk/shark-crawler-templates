@@ -1,12 +1,16 @@
 'use strict';
 
 const aws = require('aws-sdk');
-const s3Unzip = require("s3-unzip");
 const Utils = require("../helpers/util");
 const s3 = new aws.S3({
 	apiVersion: '2006-03-01'
 });
 
+// Example of JS Lambda calling Python Lambda
+// https://lorenstewart.me/2017/10/02/serverless-framework-lambdas-invoking-lambdas/
+const lambda = new aws.Lambda({
+  region: "us-east-1"
+});
 /**
  *
  * AWS S3 event handler
@@ -39,6 +43,18 @@ exports.s3OctoparseRawCsvEventListener = async (event, context, callback) => {
 
 function _processCsvFile(key) {
   console.log('Received S3 Csv Key:', key);
+   const params = {
+     FunctionName: "octoparse-postprocess-service-dev-OctoparsePostProcess"
+   };
+
+   return lambda.invoke(params, function(error, data) {
+     if (error) {
+       console.error(JSON.stringify(error));
+       return new Error(`Error printing messages: ${JSON.stringify(error)}`);
+     } else if (data) {
+       console.log("OctoparsePostProcess", data);
+     }
+   });
 }
 /**
  *
@@ -80,15 +96,4 @@ function _processZipFile(key, callback) {
     deleteOnSuccess: true,
     verbose: true
   }, callback);
-
-  // // Zip files will be unzipped within the S3 bucket and deleted upon success
-  // return new s3Unzip({
-  //     bucket: "octoparse-qa",
-  //     file: key,
-  //     deleteOnSuccess: true,
-  //     verbose: false
-  //   }, function(err, success){
-  //     if (err) console.error(err, key);
-  //     else console.log(success, key);
-  // });
 }
