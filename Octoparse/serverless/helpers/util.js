@@ -94,7 +94,7 @@ var decompress = function(/*String*/command, /*Function*/ cb) {
             var counter = 0;
           	zipEntries.forEach(function(zipEntry) {
               // bchu: Currently the directory is hard-coded here.
-              var newEntryName = "unzip-test/" + zipEntry.entryName;
+              var newEntryName = foldername + "/" + zipEntry.entryName;
               console.log("Unzipped Filename:", newEntryName);
               s3.upload({ Bucket: command.bucket, Key: newEntryName, Body: zipEntry.getData() }, function(err, data) {
 

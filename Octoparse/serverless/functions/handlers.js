@@ -5,9 +5,6 @@ const Utils = require("../helpers/util");
 const s3 = new aws.S3({
 	apiVersion: '2006-03-01'
 });
-
-// Example of JS Lambda calling Python Lambda
-// https://lorenstewart.me/2017/10/02/serverless-framework-lambdas-invoking-lambdas/
 const lambda = new aws.Lambda({
   region: "us-east-1"
 });
@@ -43,9 +40,32 @@ exports.s3OctoparseRawCsvEventListener = async (event, context, callback) => {
 
 function _processCsvFile(key) {
   console.log('Received S3 Csv Key:', key);
-   const params = {
-     FunctionName: "octoparse-postprocess-service-dev-OctoparsePostProcess"
-   };
+
+  // Lambda invokation to python parser occurs in this function:
+  // Need to determine the following params to pass into octoparse-post-process
+  // -i input file
+  // -o output directory
+  // -p platform
+  // These values can be obtained by the s3 object's folder structure. i.e.:
+  //      DHGate/1122021/DHGate-Production-CB-11042020-adidas.csv
+  // should generate the following parameter values to pass into lambda invoke:
+  //      -p dhgate
+  //      -o preprocess/octoparse-dhgate/
+  //      -i DHGate/1122021/DHGate-Production-CB-11042020-adidas.csv
+
+  var filenamePartsArray = key.split("/");
+  // Expect that the folder created will always contain the platform name first
+  var platform = filenamePartsArray[0].toLowerCase();
+  var output_dir = "preprocess/octoparse-" + platform + "/";
+
+  // input_file name will be url encoded when it's passed through the Payload
+  // here.  On the otherside in Python handler, the inputfile will be
+  // encoded again.
+  const params = {
+     FunctionName: "octoparse-postprocess-dev-octoparse-post-process",
+     Payload: '{"input_file":"' + key + '", "output_dir":"' + output_dir + '", "platform":"' + platform + '"}'
+  };
+  console.log("octoparse-post-process params", params);
 
    return lambda.invoke(params, function(error, data) {
      if (error) {
@@ -91,7 +111,7 @@ function _processZipFile(key, callback) {
 
   if (callback === undefined) {callback = function(err, success) {};}
   Utils.decompress({
-    bucket: "octoparse-qa",
+    bucket: process.env.AWS_OCTOPARSE_RAW_BUCKET_NAME,
     file: key,
     deleteOnSuccess: true,
     verbose: true
