@@ -42,8 +42,8 @@ class FileSystem(StorageSystem):
     def get_output_file(self):
         return self.__output_file
 
-    def set_output_file(self, filename):
-        self.__output_file = filename
+    def set_output_file(self, run_token):
+        self.__output_file = run_token + ".csv"
 
     def set_dataframe(self, filename):
         """

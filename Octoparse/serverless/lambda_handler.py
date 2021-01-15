@@ -1,6 +1,8 @@
 import json
 import sys
 import postprocessor.parsers.dhgate as dhgate
+import postprocessor.parsers.aliexpress as aliexpress
+import postprocessor.parsers.bukalapak as bukalapak
 
 def main(payload, context):
     """ Input File can either be .csv or .zip

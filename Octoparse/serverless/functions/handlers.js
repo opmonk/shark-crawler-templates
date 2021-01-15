@@ -74,7 +74,7 @@ function _processCsvFile(key) {
      } else if (data) {
        console.log("OctoparsePostProcess", data);
      }
-   });
+   }).promise();
 }
 /**
  *
@@ -93,6 +93,7 @@ exports.s3OctoparseRawZipEventListener = async (event, context, callback) => {
     const promises = [];
     event.Records.forEach(record => {
         promises.push(_processZipFile(record.s3.object.key, callback));
+        //_processZipFile(record.s3.object.key, callback)
     });
 
     return Promise.all(promises)
