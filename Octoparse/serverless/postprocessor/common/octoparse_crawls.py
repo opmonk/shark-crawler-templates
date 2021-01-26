@@ -8,11 +8,11 @@ from decimal import Decimal
 
 AWS_OCTOPARSE_DYNAMO_TABLE = os.getenv('AWS_OCTOPARSE_DYNAMO_TABLE')
 AWS_REGION = os.getenv('AWS_REGION')
+dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
+#dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+table = dynamodb.Table('octoparse-crawls')
 
-def create_octoparse_table(dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
+def create_octoparse_table():
     table = dynamodb.create_table(
         TableName='octoparse-crawls',
         KeySchema=[
@@ -34,21 +34,13 @@ def create_octoparse_table(dynamodb=None):
     )
     return table
 
-def load_crawls(crawls, dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
-    table = dynamodb.Table('octoparse-crawls')
+def load_crawls(crawls):
     for crawl in crawls:
         crawl_id = crawl['crawl_id']
         print("Adding crawl:", crawl_id)
         table.put_item(Item=crawl)
 
-def put_crawl(crawl_id, dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
-    table = dynamodb.Table('octoparse-crawls')
+def put_crawl(crawl_id):
     response = table.put_item(
        Item={
             'crawl_id': crawl_id
@@ -56,45 +48,65 @@ def put_crawl(crawl_id, dynamodb=None):
     )
     return response
 
-def get_crawl(crawl_id, dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
-    table = dynamodb.Table('octoparse-crawls')
-
+def get_crawl(crawl_id):
     try:
         response = table.get_item(Key={'crawl_id': crawl_id})
-        #print(response)
     except ClientError as e:
         print(e.response['Error']['Message'])
     else:
         return response['Item']
 
-def update_crawl(crawl_id, status, run_token, dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
+def update_crawl_status(crawl_id, status):
+    try:
+        response = table.update_item(
+            Key={
+                'crawl_id': crawl_id
+            },
+            UpdateExpression="set info.run_token=:r, info.status=:s",
+            ExpressionAttributeValues={
+                ':s':status,
+                ':r': 0
+            },
+            ReturnValues="UPDATED_NEW"
+        )
+    except ClientError as e:
+        if e.response['Error']['Code'] == 'ValidationException':
+          # Creating new top level attribute `info` (with nested props)
+          # if the previous query failed
+          response = table.update_item(
+              Key={
+                  "crawl_id": crawl_id
+              },
+              UpdateExpression="set #attrName = :attrValue",
+              ExpressionAttributeNames = {
+                  "#attrName" : "info"
+              },
+              ExpressionAttributeValues={
+                  ':attrValue': {
+                      'run_token': Decimal(0),
+                      'status': status
+                  }
+              },
+              ReturnValues="UPDATED_NEW"
+          )
+        else:
+          raise
+    return response
 
-    table = dynamodb.Table('octoparse-crawls')
-
+def update_crawl_run_token(crawl_id, run_token):
     response = table.update_item(
         Key={
             'crawl_id': crawl_id
         },
-        UpdateExpression="set info.run_token=:r, info.status=:s",
+        UpdateExpression="set info.run_token=:r",
         ExpressionAttributeValues={
-            ':s':status,
-            ':r': Decimal(run_token)
+            ':r': run_token
         },
         ReturnValues="UPDATED_NEW"
     )
     return response
 
-def delete_crawl(crawl_id, dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
-    table = dynamodb.Table('octoparse-crawls')
-
+def delete_crawl(crawl_id):
     try:
         response = table.delete_item(
             Key={
@@ -114,22 +126,14 @@ def delete_crawl(crawl_id, dynamodb=None):
     else:
         return response
 
-def query_crawls(crawl_id, dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
-    table = dynamodb.Table('octoparse-crawls')
+def query_crawls(crawl_id):
     response = table.query(
         KeyConditionExpression=Key('crawl_id').eq(crawl_id)
     )
     print(response)
     return response['Items']
 
-def delete_crawl_table(dynamodb=None):
-    if not dynamodb:
-        dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
-    table = dynamodb.Table('octoparse-crawls')
+def delete_crawl_table():
     table.delete()
 
 # Test functionality of DynamoDB setup
@@ -143,7 +147,7 @@ def setup_crawls_table(dynamodb=None):
     print("Table status:", octoparse_table.table_status)
 
     # Load crawls
-    with open("crawls.json") as json_file:
+    with open("octoparse_crawls.json") as json_file:
         crawl_list = json.load(json_file, parse_float=Decimal)
     load_crawls(crawl_list)
 
@@ -151,7 +155,6 @@ def test_crawls_table(dynamodb=None):
     # Create crawl
     crawl_resp = put_crawl("DHGate-Production-CB-11042020-adidas.csv")
     print("Put crawl succeeded:")
-    #pprint(crawl_resp, sort_dicts=False)
 
     # Read crawl
     crawl = get_crawl("DHGate-Production-CB-11042020(1).csv")
@@ -171,8 +174,6 @@ def test_crawls_table(dynamodb=None):
     if delete_response:
         print("Delete crawl succeeded:")
         print(delete_response)
-        #pprint(delete_response, sort_dicts=False)
-
 
     # Query crawls
     query_crawl_id = "DHGate-Production-CB-11042020(1).csv"
