@@ -51,21 +51,21 @@ def put_crawl(crawl_id):
 def get_crawl(crawl_id):
     try:
         response = table.get_item(Key={'crawl_id': crawl_id})
+        print("GET CRAWL:", response['Item'])
     except ClientError as e:
         print(e.response['Error']['Message'])
     else:
         return response['Item']
 
-def update_crawl_status(crawl_id, status):
+def update_crawl_status(crawl_id, statuses):
     try:
         response = table.update_item(
             Key={
                 'crawl_id': crawl_id
             },
-            UpdateExpression="set info.run_token=:r, info.status=:s",
+            UpdateExpression="set info.statuses=:s",
             ExpressionAttributeValues={
-                ':s':status,
-                ':r': 0
+                ':s': statuses
             },
             ReturnValues="UPDATED_NEW"
         )
@@ -83,14 +83,14 @@ def update_crawl_status(crawl_id, status):
               },
               ExpressionAttributeValues={
                   ':attrValue': {
-                      'run_token': Decimal(0),
-                      'status': status
+                      'statuses': statuses
                   }
               },
               ReturnValues="UPDATED_NEW"
           )
         else:
           raise
+    print("UP STATUS:",response)
     return response
 
 def update_crawl_run_token(crawl_id, run_token):
@@ -104,6 +104,8 @@ def update_crawl_run_token(crawl_id, run_token):
         },
         ReturnValues="UPDATED_NEW"
     )
+
+    print("UP RUN TOKEN:",response)
     return response
 
 def delete_crawl(crawl_id):
@@ -124,7 +126,9 @@ def delete_crawl(crawl_id):
         else:
             raise
     else:
+        print(response)
         return response
+
 
 def query_crawls(crawl_id):
     response = table.query(
@@ -154,33 +158,25 @@ def setup_crawls_table(dynamodb=None):
 def test_crawls_table(dynamodb=None):
     # Create crawl
     crawl_resp = put_crawl("DHGate-Production-CB-11042020-adidas.csv")
-    print("Put crawl succeeded:")
-
-    # Read crawl
-    crawl = get_crawl("DHGate-Production-CB-11042020(1).csv")
-    if crawl:
-        print("Get crawl succeeded:")
-        print(crawl)
 
     # Read crawl
     crawl = get_crawl("DHGate-Production-CB-11042020-adidas.csv")
-    if crawl:
-        print("Get crawl succeeded:")
-        print(crawl)
+    crawl_resp = update_crawl_status("DHGate-Production-CB-11042020-adidas.csv", "scheduled")
+    crawl_resp = update_crawl_run_token("DHGate-Production-CB-11042020-adidas.csv", 1234)
+    crawl_resp = update_crawl_status("DHGate-Production-CB-11042020-adidas.csv", "complete")
+    crawl = get_crawl("DHGate-Production-CB-11042020-adidas.csv")
 
     # Delete crawl
-    print("Attempting a conditional delete...")
-    delete_response = delete_crawl("DHGate-Production-CB-11042020-adidas.csv")
-    if delete_response:
-        print("Delete crawl succeeded:")
-        print(delete_response)
+    #print("Attempting a conditional delete...")
+    #delete_response = delete_crawl("DHGate-Production-CB-11042020-adidas.csv")
 
     # Query crawls
     query_crawl_id = "DHGate-Production-CB-11042020(1).csv"
     print(f"Crawls from {query_crawl_id}")
     crawls = query_crawls(query_crawl_id)
-    for crawl in crawls:
-        print(crawl['crawl_id'])
+    print(crawls)
+    #for crawl in crawls:
+    #    print(crawl['crawl_id'])
 
 if __name__ == '__main__':
     setup_crawls_table()
