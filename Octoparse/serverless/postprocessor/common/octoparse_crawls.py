@@ -12,7 +12,7 @@ AWS_REGION = os.getenv('AWS_REGION')
 dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
 table = dynamodb.Table(AWS_OCTOPARSE_DYNAMO_TABLE)
 
-class OctoparseDynamoDB():
+class OctoparseDynamoDB(object):
     def create_octoparse_table(self):
         table = dynamodb.create_table(
             TableName='octoparse-crawls',
@@ -52,11 +52,11 @@ class OctoparseDynamoDB():
     def get_crawl(self, crawl_id):
         try:
             response = table.get_item(Key={'crawl_id': crawl_id})
-            print("GET CRAWL:", response['Item'])
-        except ClientError as e:
-            print(e.response['Error']['Message'])
-        else:
+            #print("GET: ",response['Item'])
             return response['Item']
+        except ClientError as e:
+            print("ClientError: ", e.response['Error']['Message'])
+            return e
 
     def update_crawl_status(self, crawl_id, statuses):
         try:
@@ -165,7 +165,7 @@ class OctoparseDynamoDB():
         crawl_resp = self.update_crawl_status("DHGate-Production-CB-11042020-adidas.csv", "scheduled")
         crawl_resp = self.update_crawl_run_token("DHGate-Production-CB-11042020-adidas.csv", 1234)
         crawl_resp = self.update_crawl_status("DHGate-Production-CB-11042020-adidas.csv", "complete")
-        crawl = self.get_crawl("DHGate-Production-CB-11042020-adidas.csv")
+        crawl = self.get_crawl("DHGate-Production-CB-12311042020-adidas.csv")
 
         # Delete crawl
         #print("Attempting a conditional delete...")

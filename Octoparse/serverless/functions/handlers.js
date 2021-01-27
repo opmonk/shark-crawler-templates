@@ -1,6 +1,13 @@
 'use strict';
 
 const aws = require('aws-sdk');
+// aws.config.update({
+//     maxRetries: 0,
+//     httpOptions: {
+//         timeout: 450000,
+//         connectTimeout: 450000
+//     }
+// });
 const Utils = require("../helpers/util");
 const s3 = new aws.S3({
 	apiVersion: '2006-03-01'
@@ -8,6 +15,7 @@ const s3 = new aws.S3({
 const lambda = new aws.Lambda({
   region: "us-east-1"
 });
+
 /**
  *
  * AWS S3 event handler
@@ -21,24 +29,16 @@ const lambda = new aws.Lambda({
  */
 exports.s3OctoparseRawCsvEventListener = async (event, context, callback) => {
     console.log('Received S3 CSV Event:', event);
-
     const promises = [];
-    event.Records.forEach(record => {
-        promises.push(_processCsvFile(record.s3.object.key));
-    });
-
-    return Promise.all(promises)
-        .then(() => {
-            console.log('EVENT PROCESSING SUCCESS');
-            return callback(null, { result: 'OK' });
-        })
-        .catch(err => {
-            console.error('EVENT PROCESSING FAILED', err);
-            return callback(err);
-        });
+    for (let i = 0; i < event.Records.length; i++) {
+    		const key = event.Records[i].s3.object.key;
+    		promises.push(_processCsvFile(key));
+        console.log('Done processing Key:', key);
+    }
+    return await Promise.allSettled(promises);
 };
 
-function _processCsvFile(key) {
+async function _processCsvFile(key) {
   console.log('Received S3 Csv Key:', key);
 
   // Lambda invokation to python parser occurs in this function:
@@ -52,29 +52,34 @@ function _processCsvFile(key) {
   //      -p dhgate
   //      -o preprocess/octoparse-dhgate/
   //      -i DHGate/1122021/DHGate-Production-CB-11042020-adidas.csv
-
   var filenamePartsArray = key.split("/");
   // Expect that the folder created will always contain the platform name first
   var platform = filenamePartsArray[0].toLowerCase();
   var output_dir = "preprocess/octoparse-" + platform + "/";
 
-  // input_file name will be url encoded when it's passed through the Payload
-  // here.  On the otherside in Python handler, the inputfile will be
-  // encoded again.
   const params = {
      FunctionName: "octoparse-postprocess-dev-octoparse-post-process",
      Payload: '{"input_file":"' + key + '", "output_dir":"' + output_dir + '", "platform":"' + platform + '"}'
   };
   console.log("octoparse-post-process params", params);
+  var data = '';
 
-   return lambda.invoke(params, function(error, data) {
-     if (error) {
-       console.error(JSON.stringify(error));
-       return new Error(`Error printing messages: ${JSON.stringify(error)}`);
-     } else if (data) {
-       console.log("OctoparsePostProcess", data);
-     }
-   }).promise();
+  try {
+     // Need to make this call idempotent through use of DynamoDB
+     data = await lambda.invoke(params, function(error, data) {
+        console.log("Lambda Invoke:", params);
+        if (error) {
+           console.error(JSON.stringify(error));
+           return new Error(`Error printing messages: ${JSON.stringify(error)}`);
+        } else if (data) {
+           console.log("OctoparsePostProcess", data);
+        }
+     }).promise();
+  } catch (err) {
+     console.log(err);
+     return err;
+  }
+  return data;
 }
 /**
  *
@@ -93,7 +98,6 @@ exports.s3OctoparseRawZipEventListener = async (event, context, callback) => {
     const promises = [];
     event.Records.forEach(record => {
         promises.push(_processZipFile(record.s3.object.key, callback));
-        //_processZipFile(record.s3.object.key, callback)
     });
 
     return Promise.all(promises)

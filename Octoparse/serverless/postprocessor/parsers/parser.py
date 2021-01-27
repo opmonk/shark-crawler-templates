@@ -33,8 +33,8 @@ class Parser(object):
     #__is_s3_bucket = False    # Determines if input & output files/dir are s3 buckets
 
     __storage_system = FileSystem()
-    CRAWLERS_API = "https://51lb672yhd.execute-api.us-east-2.amazonaws.com/dev/crawlers"
-    CRAWLER_ID_API_PREFIX = "https://43hy8cvigk.execute-api.us-east-2.amazonaws.com/production/crawlers/"
+    CRAWLERS_API = os.getenv('CRAWLERS_API')
+    CRAWLER_ID_API_PREFIX = os.getenv('CRAWLER_ID_API_PREFIX')
     CRAWLER_ID_API_SUFFIX = "/metadata"
 
     def __init__(self, argv):

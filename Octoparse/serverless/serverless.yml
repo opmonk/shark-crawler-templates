@@ -10,6 +10,7 @@ provider:
   environment:
     AWS_OCTOPARSE_RAW_BUCKET_NAME: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
     AWS_OCTOPARSE_CRAWLERS_BUCKET_NAME: ${env:AWS_OCTOPARSE_CRAWLERS_BUCKET_NAME}
+    AWS_OCTOPARSE_DYNAMO_TABLE: ${env:AWS_OCTOPARSE_DYNAMO_TABLE}
 
 package:
   individually: true
@@ -31,21 +32,29 @@ functions:
             - suffix: .zip
           existing: true      # https://www.serverless.com/framework/docs/providers/aws/events/s3/
     timeout: 900
+
   s3-octoparse-raw-csv-event-listener:
     runtime: nodejs12.x
     handler: functions/handlers.s3OctoparseRawCsvEventListener
     events:
       - s3:
           bucket: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
+          #event: s3:ObjectCreated:CompleteMultipartUpload
           event: s3:ObjectCreated:*
           rules:
             - suffix: .csv
           existing: true
     timeout: 900
+
 plugins:
   - serverless-python-requirements
   - serverless-dotenv-plugin
+  - serverless-dynamodb-local
 
 custom:
   pythonRequirements:
     dockerizePip: non-linux
+  dynamodb:
+    start:
+      migrate: true
+      noStart: true # relying on existing running instance
