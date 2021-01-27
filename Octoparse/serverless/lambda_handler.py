@@ -40,7 +40,8 @@ def main(event, context):
     input_file = str(params['input_file'])
 
     # Early exit of function if lambda function has already been called.
-    if file_already_processed(input_file):
+    octoparseDynamoDB = OctoparseDynamoDB()
+    if octoparseDynamoDB.put_crawl(input_file) == False:
         print("File is already being processed, Exitting:", input_file)
         return 0
 
@@ -59,27 +60,9 @@ def main(event, context):
         return 2
     return 0
 
-def file_already_processed(input_file):
-    """
-    DyanmoDB Table must contain crawlId Item & status attribute
-    """
-    octoparseDynamoDB = OctoparseDynamoDB()
-    crawls = octoparseDynamoDB.query_crawls(input_file)
-    if len(crawls) == 0:
-        octoparseDynamoDB.put_crawl(input_file)
-        octoparseDynamoDB.update_crawl_status(input_file, "scheduled")
-        return 0
-    else:
-        print("Input File is already being processed:", input_file)
-        return 1
-    # Need to make sure this program is only called once per input file
-    # Since this is a lambda function called within a lambda function, need
-    # to ensure there is idempotency.  Refer to following document for how
-    # to implement with DynamoDB as persistent storage
-    # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/dynamodb.html
 
 if __name__ == "__main__":
     #print("Lambda Input Values", sys.argv[1], sys.argv[2])
-    event = '{"input_file":"Bukalapak/1142021/Bukalapak-Production-CB-11112020/Bukalapak-Production-CB-11112020.csv","output_dir":"preprocess/octoparse-bukalapak/","platform":"bukalapak"}'
+    event = '{"input_file":"Bukalapak/1142021/Bukalapak/Bukalapak.csv","output_dir":"preprocess/octoparse-bukalapak/","platform":"bukalapak"}'
     response = main(event, '')
     print(response)

@@ -6,12 +6,13 @@ import postprocessor.parsers.bukalapak as bukalapak
 from postprocessor.common.octoparse_crawls import OctoparseDynamoDB
 
 def main(event, context):
-    input_file = '../results/raw/1142021/Bukalapak-Production-CB-11112020.csv'
-    output_dir = '../results/preprocess/'
-    platform = 'bukalapak'
+    input_file = '../results/raw/zip/DHGate-Production-CB-11042020(2).csv'
+    output_dir = '../results/preprocess/file'
+    platform = 'dhgate'
 
     # Early exit of function if lambda function has already been called.
-    if file_already_processed(input_file):
+    octoparseDynamoDB = OctoparseDynamoDB()
+    if octoparseDynamoDB.put_crawl(input_file) == False:
         print("File is already being processed, Exitting:", input_file)
         return 0
 
@@ -27,19 +28,6 @@ def main(event, context):
     else:
         print("Unrecognized Platform", platform)
 
-def file_already_processed(input_file):
-    """
-    DyanmoDB Table must contain crawlId Item & status attribute
-    """
-    octoparseDynamoDB = OctoparseDynamoDB()
-    crawls = octoparseDynamoDB.query_crawls(input_file)
-    if len(crawls) == 0:
-        octoparseDynamoDB.put_crawl(input_file)
-        octoparseDynamoDB.update_crawl_status(input_file, "scheduled")
-        return 0
-    else:
-        print("Input File is already being processed:", input_file)
-        return 1
 
 if __name__ == "__main__":
     main('','')

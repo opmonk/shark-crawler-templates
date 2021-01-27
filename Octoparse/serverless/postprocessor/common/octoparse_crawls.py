@@ -5,14 +5,44 @@ from pprint import pprint
 from botocore.exceptions import ClientError
 from boto3.dynamodb.conditions import Key
 from decimal import Decimal
+#from python_dynamodb_lock.python_dynamodb_lock import *
 
 AWS_OCTOPARSE_DYNAMO_TABLE = os.getenv('AWS_OCTOPARSE_DYNAMO_TABLE')
 AWS_REGION = os.getenv('AWS_REGION')
 #dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
+
+
 dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
+# create the lock-client
+#lock_client = DynamoDBLockClient(dynamodb)
+
 table = dynamodb.Table(AWS_OCTOPARSE_DYNAMO_TABLE)
 
 class OctoparseDynamoDB(object):
+
+    def file_already_processed(self, input_file):
+        """
+        DyanmoDB Table must contain crawlId Item & status attribute
+        """
+        #lock = lock_client.acquire_lock('my_key')
+        try:
+            crawl_response = self.get_crawl(input_file)
+            crawl = crawl_response['Item']
+            # If there's a KeyError, then it means the file does not yet exist.
+            print("Input File is already being processed:", crawl)
+            #lock.release()
+            return 1
+        except KeyError as e:
+            self.put_crawl(input_file)
+            self.update_crawl_status(input_file, "scheduled")
+            print("New File Seen:", input_file)
+            return 0
+        # Need to make sure this program is only called once per input file
+        # Since this is a lambda function called within a lambda function, need
+        # to ensure there is idempotency.  Refer to following document for how
+        # to implement with DynamoDB as persistent storage
+        # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/dynamodb.html
+
     def create_octoparse_table(self):
         table = dynamodb.create_table(
             TableName='octoparse-crawls',
@@ -42,18 +72,28 @@ class OctoparseDynamoDB(object):
             table.put_item(Item=crawl)
 
     def put_crawl(self, crawl_id):
-        response = table.put_item(
-           Item={
-                'crawl_id': crawl_id
-            }
-        )
-        return response
+        try:
+            response = table.put_item(
+               Item={
+                    'crawl_id': crawl_id
+               },
+               ConditionExpression="attribute_not_exists(#c)",
+               ExpressionAttributeNames={"#c": "crawl_id"}
+            )
+            return response
+        except ClientError as e:
+            # Another exception than ConditionalCheckFailedException was caught, raise as-is
+            if e.response['Error']['Code'] != 'ConditionalCheckFailedException':
+                raise
+            else:
+                # Else, lock cannot be acquired because already locked
+                return False
 
     def get_crawl(self, crawl_id):
         try:
             response = table.get_item(Key={'crawl_id': crawl_id})
-            #print("GET: ",response['Item'])
-            return response['Item']
+            print("GET: ",response['Item'])
+            return response
         except ClientError as e:
             print("ClientError: ", e.response['Error']['Message'])
             return e
@@ -159,7 +199,7 @@ class OctoparseDynamoDB(object):
     def test_crawls_table(self):
         # Create crawl
         crawl_resp = self.put_crawl("DHGate-Production-CB-11042020-adidas.csv")
-
+        print("PUT KEY:", crawl_resp)
         # Read crawl
         crawl = self.get_crawl("DHGate-Production-CB-11042020-adidas.csv")
         crawl_resp = self.update_crawl_status("DHGate-Production-CB-11042020-adidas.csv", "scheduled")
