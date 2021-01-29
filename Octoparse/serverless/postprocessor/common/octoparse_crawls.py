@@ -20,29 +20,6 @@ table = dynamodb.Table(AWS_OCTOPARSE_DYNAMO_TABLE)
 
 class OctoparseDynamoDB(object):
 
-    def file_already_processed(self, input_file):
-        """
-        DyanmoDB Table must contain crawlId Item & status attribute
-        """
-        #lock = lock_client.acquire_lock('my_key')
-        try:
-            crawl_response = self.get_crawl(input_file)
-            crawl = crawl_response['Item']
-            # If there's a KeyError, then it means the file does not yet exist.
-            print("Input File is already being processed:", crawl)
-            #lock.release()
-            return 1
-        except KeyError as e:
-            self.put_crawl(input_file)
-            self.update_crawl_status(input_file, "scheduled")
-            print("New File Seen:", input_file)
-            return 0
-        # Need to make sure this program is only called once per input file
-        # Since this is a lambda function called within a lambda function, need
-        # to ensure there is idempotency.  Refer to following document for how
-        # to implement with DynamoDB as persistent storage
-        # https://boto3.amazonaws.com/v1/documentation/api/latest/guide/dynamodb.html
-
     def create_octoparse_table(self):
         table = dynamodb.create_table(
             TableName='octoparse-crawls',
@@ -71,6 +48,12 @@ class OctoparseDynamoDB(object):
             print("Adding crawl:", crawl_id)
             table.put_item(Item=crawl)
 
+    """
+    Primary Function used by lambda_handler & file_handler to ensure
+    that each file is only processed 1 time.  ConditionExpression ensures
+    that the function is locked when called multiple times (to avoid race
+    conditions)
+    """
     def put_crawl(self, crawl_id):
         try:
             response = table.put_item(
@@ -155,11 +138,6 @@ class OctoparseDynamoDB(object):
                 Key={
                     'crawl_id': crawl_id
                 }
-                #,
-                #ConditionExpression="info.status <= :val",
-                #ExpressionAttributeValues={
-                #    ":val": Decimal(run_token)
-                #}
             )
         except ClientError as e:
             if e.response['Error']['Code'] == "ConditionalCheckFailedException":
