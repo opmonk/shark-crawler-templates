@@ -1,11 +1,10 @@
-
 service: octoparse-postprocess
 
 provider:
   name: aws                   # Assuming this is for AWS Lambda.
   stage: dev
-  profile: qa
-  region: us-east-1
+  profile: staging
+  region: us-east-2
   role: ${env:AWS_FUNCTION_ROLE_ARN}
   environment:
     AWS_OCTOPARSE_RAW_BUCKET_NAME: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
@@ -58,3 +57,5 @@ custom:
     start:
       migrate: true
       noStart: true # relying on existing running instance
+
+resources: ${file(./resources/serverless-resources.staging.yml)}

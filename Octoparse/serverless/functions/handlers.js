@@ -12,9 +12,7 @@ const Utils = require("../helpers/util");
 const s3 = new aws.S3({
 	apiVersion: '2006-03-01'
 });
-const lambda = new aws.Lambda({
-  region: "us-east-1"
-});
+const lambda = new aws.Lambda();
 
 /**
  *

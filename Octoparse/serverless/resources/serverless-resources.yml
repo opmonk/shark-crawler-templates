@@ -1,0 +1,53 @@
+  Resources:
+    #----------------------------------------------------------------------------------------------
+    # DynamoDB table
+    #----------------------------------------------------------------------------------------------
+    octoparseCrawlsDynamoDBTable:
+      Type: 'AWS::DynamoDB::Table'
+      Properties:
+        AttributeDefinitions:
+          - AttributeName: crawl_id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: crawl_id
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${env:AWS_OCTOPARSE_DYNAMO_TABLE}
+
+    #==============================================================================================
+    # S3 Bucket resources
+    #----------------------------------------------------------------------------------------------
+    octoparseRawResultsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
+        AccessControl: Private
+        CorsConfiguration:
+          CorsRules:
+          - AllowedMethods:
+            - GET
+            - PUT
+            - POST
+            - HEAD
+            AllowedOrigins:
+            - "*"
+            AllowedHeaders:
+            - "*"
+    octoparseParsedResultsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: ${env:AWS_OCTOPARSE_CRAWLERS_BUCKET_NAME}
+        AccessControl: Private
+        CorsConfiguration:
+          CorsRules:
+          - AllowedMethods:
+            - GET
+            - PUT
+            - POST
+            - HEAD
+            AllowedOrigins:
+            - "*"
+            AllowedHeaders:
+            - "*"
