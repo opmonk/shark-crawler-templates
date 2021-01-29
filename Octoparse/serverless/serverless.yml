@@ -2,9 +2,9 @@ service: octoparse-postprocess
 
 provider:
   name: aws                   # Assuming this is for AWS Lambda.
-  stage: dev
-  profile: staging
-  region: us-east-2
+  stage: dev                 # Should be specified in deploy cmd
+  #profile: staging           # Should be specified in deploy cmd
+  #region: us-east-2          # Should be specified in deploy cmd
   role: ${env:AWS_FUNCTION_ROLE_ARN}
   environment:
     AWS_OCTOPARSE_RAW_BUCKET_NAME: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
@@ -13,6 +13,15 @@ provider:
 
 package:
   individually: true
+
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
+  dynamodb:
+    start:
+      migrate: true
+      noStart: true # relying on existing running instance
+  stage: ${opt:stage, self:provider.stage}
 
 functions:
   octoparse-post-process:
@@ -44,18 +53,14 @@ functions:
             - suffix: .csv
           existing: true
     timeout: 900
+    environment:
+      AWS_LAMBDA_ENDPOINT: octoparse-postprocess-${self:custom.stage}-octoparse-post-process
 
 plugins:
   - serverless-python-requirements
   - serverless-dotenv-plugin
   - serverless-dynamodb-local
 
-custom:
-  pythonRequirements:
-    dockerizePip: non-linux
-  dynamodb:
-    start:
-      migrate: true
-      noStart: true # relying on existing running instance
 
+# You'll need to uncomment the following line if deploying on QA
 resources: ${file(./resources/serverless-resources.staging.yml)}

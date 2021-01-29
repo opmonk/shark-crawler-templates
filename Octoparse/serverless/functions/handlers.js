@@ -56,7 +56,7 @@ async function _processCsvFile(key) {
   var output_dir = "preprocess/octoparse-" + platform + "/";
 
   const params = {
-     FunctionName: "octoparse-postprocess-dev-octoparse-post-process",
+     FunctionName: process.env.AWS_LAMBDA_ENDPOINT,
      Payload: '{"input_file":"' + key + '", "output_dir":"' + output_dir + '", "platform":"' + platform + '"}'
   };
   console.log("octoparse-post-process params", params);

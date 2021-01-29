@@ -9,13 +9,10 @@ from decimal import Decimal
 
 AWS_OCTOPARSE_DYNAMO_TABLE = os.getenv('AWS_OCTOPARSE_DYNAMO_TABLE')
 AWS_REGION = os.getenv('AWS_REGION')
+
+# If you want to test with local dynamodb
 #dynamodb = boto3.resource('dynamodb', endpoint_url="http://localhost:8000")
-
-
 dynamodb = boto3.resource('dynamodb', region_name=AWS_REGION)
-# create the lock-client
-#lock_client = DynamoDBLockClient(dynamodb)
-
 table = dynamodb.Table(AWS_OCTOPARSE_DYNAMO_TABLE)
 
 class OctoparseDynamoDB(object):
@@ -53,6 +50,7 @@ class OctoparseDynamoDB(object):
     that each file is only processed 1 time.  ConditionExpression ensures
     that the function is locked when called multiple times (to avoid race
     conditions)
+    https://blog.revolve.team/2020/09/08/implement-mutex-with-dynamodb/
     """
     def put_crawl(self, crawl_id):
         try:
