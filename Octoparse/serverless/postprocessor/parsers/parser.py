@@ -30,11 +30,11 @@ class Parser(object):
     __timestamp = ''
     __crawler_id = 0          # Caches crawlerId from API Call
     __crawlers_data = None    # Caches all keywords & start_urls from API Call
-    __is_s3_bucket = False    # Determines if input & output files/dir are s3 buckets
+    #__is_s3_bucket = False    # Determines if input & output files/dir are s3 buckets
 
     __storage_system = FileSystem()
-    CRAWLERS_API = "https://51lb672yhd.execute-api.us-east-2.amazonaws.com/dev/crawlers"
-    CRAWLER_ID_API_PREFIX = "https://43hy8cvigk.execute-api.us-east-2.amazonaws.com/production/crawlers/"
+    CRAWLERS_API = os.getenv('CRAWLERS_API')
+    CRAWLER_ID_API_PREFIX = os.getenv('CRAWLER_ID_API_PREFIX')
     CRAWLER_ID_API_SUFFIX = "/metadata"
 
     def __init__(self, argv):
@@ -51,11 +51,11 @@ class Parser(object):
             elif opt in ("-p", "--platform"):
                 self.__platform = arg
             elif opt in ("-i", "--results_file"):
-                self.__storage_system.set_input_file(arg)
+                self.__storage_system.set_input_file(self.__decode_filename(arg))
             elif opt in ("-o", "--processed_results_dir"):
                 self.__storage_system.set_output_dir(arg)
             elif opt in ("-b"):
-                self.__is_s3_bucket = True
+                #self.__is_s3_bucket = True
                 self.__storage_system = Bucket()
 
 
@@ -202,6 +202,15 @@ class Parser(object):
         keyword_trimmed = keyword_trimmed.lower()
         return keyword_trimmed
 
+    def __decode_filename(self, keyword):
+        """
+        Filename needs to be decoded.
+        """
+        # needed for the input filename. e.g. DHGate-Production-CB-11042020%281%29.csv)
+        keyword_trimmed = re.sub(r'%28','(', keyword)
+        keyword_trimmed = re.sub(r'%29',')', keyword_trimmed)
+        return keyword_trimmed
+
     def __decode(self, keyword):
         """
         Octoparse results set needs to be decoded.
@@ -211,6 +220,7 @@ class Parser(object):
         keyword_trimmed = re.sub(r'%20','+', keyword)
         # %21 = !
         keyword_trimmed = re.sub(r'%21','!', keyword_trimmed)
+
         keyword_trimmed = keyword_trimmed.lower()
         return keyword_trimmed
 
@@ -301,10 +311,13 @@ class Parser(object):
             scrubbed_keyword = self.scrub(keyword)
 
             print("creating files:", scrubbed_keyword, keyword)
-            if self.__is_s3_bucket:
-                p_results_file = self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
-            else:
-                p_results_file = self.__storage_system.get_output_dir() + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+            self.__storage_system.set_output_file(self.__get_run_token(scrubbed_keyword, keyword.lower()))
+            p_results_file = self.__storage_system.get_output_file()
+
+            # if self.__is_s3_bucket:
+            #     p_results_file = self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
+            # else:
+            #     p_results_file = self.__storage_system.get_output_dir() + self.__get_run_token(scrubbed_keyword, keyword.lower()) + ".csv"
             print("Get Run Token:", p_results_file)
 
             # If file does not exist, then need to create a new file with header

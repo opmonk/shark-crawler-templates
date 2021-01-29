@@ -1,0 +1,66 @@
+service: octoparse-postprocess
+
+provider:
+  name: aws                   # Assuming this is for AWS Lambda.
+  stage: dev       # Should be specified in deploy cmd, this is setting a default value
+  #profile: staging           # Should be specified in deploy cmd
+  #region: us-east-2          # Should be specified in deploy cmd
+  role: ${env:AWS_FUNCTION_ROLE_ARN}
+  environment:
+    AWS_OCTOPARSE_RAW_BUCKET_NAME: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
+    AWS_OCTOPARSE_CRAWLERS_BUCKET_NAME: ${env:AWS_OCTOPARSE_CRAWLERS_BUCKET_NAME}
+    AWS_OCTOPARSE_DYNAMO_TABLE: ${env:AWS_OCTOPARSE_DYNAMO_TABLE}
+
+package:
+  individually: true
+
+custom:
+  pythonRequirements:
+    dockerizePip: non-linux
+  dynamodb:
+    start:
+      migrate: true
+      noStart: true # relying on existing running instance
+  stage: ${opt:stage, self:provider.stage}
+
+functions:
+  octoparse-post-process:
+    runtime: python3.8
+    handler: lambda_handler.main
+    timeout: 900
+
+  s3-octoparse-raw-zip-event-listener: #https://developer.aliyun.com/mirror/npm/package/s3-unzip
+    runtime: nodejs12.x     # https://www.serverless.com/framework/docs/providers/aws/guide/functions/
+    handler: functions/handlers.s3OctoparseRawZipEventListener
+    events:
+      - s3:
+          bucket: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
+          event: s3:ObjectCreated:*
+          rules:
+            - suffix: .zip
+          existing: true      # https://www.serverless.com/framework/docs/providers/aws/events/s3/
+    timeout: 900
+
+  s3-octoparse-raw-csv-event-listener:
+    runtime: nodejs12.x
+    handler: functions/handlers.s3OctoparseRawCsvEventListener
+    events:
+      - s3:
+          bucket: ${env:AWS_OCTOPARSE_RAW_BUCKET_NAME}
+          #event: s3:ObjectCreated:CompleteMultipartUpload
+          event: s3:ObjectCreated:*
+          rules:
+            - suffix: .csv
+          existing: true
+    timeout: 900
+    environment:
+      AWS_LAMBDA_ENDPOINT: octoparse-postprocess-${self:custom.stage}-octoparse-post-process
+
+plugins:
+  - serverless-python-requirements
+  - serverless-dotenv-plugin
+  - serverless-dynamodb-local
+
+
+# You'll need to uncomment the following line if deploying on QA
+# resources: ${file(./resources/serverless-resources.yml)}
