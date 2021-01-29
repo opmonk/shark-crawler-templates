@@ -2,7 +2,7 @@ service: octoparse-postprocess
 
 provider:
   name: aws                   # Assuming this is for AWS Lambda.
-  stage: dev                 # Should be specified in deploy cmd
+  stage: dev       # Should be specified in deploy cmd, this is setting a default value
   #profile: staging           # Should be specified in deploy cmd
   #region: us-east-2          # Should be specified in deploy cmd
   role: ${env:AWS_FUNCTION_ROLE_ARN}
@@ -63,4 +63,4 @@ plugins:
 
 
 # You'll need to uncomment the following line if deploying on QA
-resources: ${file(./resources/serverless-resources.staging.yml)}
+# resources: ${file(./resources/serverless-resources.yml)}
