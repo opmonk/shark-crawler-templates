@@ -28,6 +28,6 @@ do
 	# PLEASE NOTE: Uncomment the following line if you'd like to download to local directory for verification.
 	# But beware that this is creating a lot of calls across the wire.  So only perform this when you really
 	# need to check all files.
-	#aws s3 cp "s3://$bucketName/$file" $downloadDir --profile staging
+	# aws s3 cp "s3://$bucketName/$file" $downloadDir --profile $profile
 done
 
