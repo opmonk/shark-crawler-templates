@@ -27,7 +27,7 @@ var AWS = require("aws-sdk");
 var s3 = new AWS.S3();
 var AdmZip = require("adm-zip");
 var fs = require("fs");
-var dateTime = require("date-time");
+//import dateTime  from "date-time";
 var md5 = require("md5");
 var mime = require('mime-types');
 
@@ -66,7 +66,10 @@ var decompress = function(/*String*/command, /*Function*/ cb) {
            	if (command.verbose) console.log("Zip file '"+command.file+"' found in S3 bucket!");
 
             //write the zip file locally in a tmp dir
-            var tmpZipFilename = md5(dateTime({showMilliseconds: true}));
+            var date = new Date();
+            var dt = new Date(date.getTime() - (date.getTimezoneOffset() * 60000))
+            var end = ` ${dt.getUTCMilliseconds()}ms`;
+            var tmpZipFilename = md5(dt.toISOString().replace(/T/, ' ').replace(/\..+/, end));
             fs.writeFileSync("/tmp/"+tmpZipFilename+".zip", data.Body);
 
             //check that file in that location is a zip content type, otherwise throw error and exit

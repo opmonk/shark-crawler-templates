@@ -30,7 +30,7 @@ functions:
     timeout: 900
 
   s3-octoparse-raw-zip-event-listener: #https://developer.aliyun.com/mirror/npm/package/s3-unzip
-    runtime: nodejs12.x     # https://www.serverless.com/framework/docs/providers/aws/guide/functions/
+    runtime: nodejs14.x     # https://www.serverless.com/framework/docs/providers/aws/guide/functions/
     handler: functions/handlers.s3OctoparseRawZipEventListener
     events:
       - s3:
@@ -42,7 +42,7 @@ functions:
     timeout: 900
 
   s3-octoparse-raw-csv-event-listener:
-    runtime: nodejs12.x
+    runtime: nodejs14.x
     handler: functions/handlers.s3OctoparseRawCsvEventListener
     events:
       - s3:
@@ -63,4 +63,4 @@ plugins:
 
 
 # You'll need to uncomment the following line if deploying on QA
-# resources: ${file(./resources/serverless-resources.yml)}
+resources: ${file(./resources/serverless-resources.yml)}

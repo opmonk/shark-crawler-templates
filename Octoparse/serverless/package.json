@@ -8,7 +8,13 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "adm-zip": "^0.5.5",
     "aws-sdk": "^2.824.0",
+    "date-time": "^4.0.0",
+    "md5": "^2.3.0",
+    "mime-types": "^2.1.30",
+    "serverless-dotenv-plugin": "^3.9.0",
+    "serverless-dynamodb-local": "^0.2.39",
     "serverless-python-requirements": "^5.1.0",
     "strict": "0.0.0"
   },
