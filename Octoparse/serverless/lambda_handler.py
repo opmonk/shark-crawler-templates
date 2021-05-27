@@ -5,6 +5,7 @@ import postprocessor.parsers.aliexpress as aliexpress
 import postprocessor.parsers.bukalapak as bukalapak
 import postprocessor.parsers.lazada as lazada
 import postprocessor.parsers.wish as wish
+import postprocessor.parsers.amazon as amazon
 from postprocessor.common.octoparse_crawls import OctoparseDynamoDB
 
 def main(event, context):
@@ -63,6 +64,9 @@ def main(event, context):
     elif platform.find('lazada') != -1:
         print("Lazada")
         lazada.LazadaParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
+    elif platform == 'amazon':
+        print("Amazon")
+        amazon.AmazonParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
     else:
         print("ERROR: Unrecognized Platform", platform)
         return 2
