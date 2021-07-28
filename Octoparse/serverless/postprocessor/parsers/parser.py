@@ -125,7 +125,7 @@ class Parser(object):
             while attempts < max_attempts:
                 response = requests.get(self.CRAWLER_ID_API_PREFIX + str(self.__crawler_id) + self.CRAWLER_ID_API_SUFFIX)
                 self.__crawlers_data = json.loads(response.text)
-                #print(response.text, response.status_code)
+                print("HERE:", self.CRAWLER_ID_API_PREFIX + str(self.__crawler_id) + self.CRAWLER_ID_API_SUFFIX, response)
                 if response.status_code != 200:
                     print("ERROR:", response.text, attempts)
                     attempts = attempts + 1

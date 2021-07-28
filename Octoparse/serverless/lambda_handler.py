@@ -48,27 +48,33 @@ def main(event, context):
         print("File is already being processed, Exitting:", input_file)
         return 0
 
+    filename = input_file.split('/')[-1].lower()
+
+    if filename.find(platform) == -1:
+        print("ERROR: Wrong File '", filename, "' to Platform Folder")
+        return 2       
+
     # Else Continue processing
     if platform == 'dhgate':
-        print("DHGate")
+        print("DHGate ", filename)
         dhgate.DHGateParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
     elif platform == 'aliexpress':
-        print("Aliexpress")
+        print("Aliexpress ", filename)
         aliexpress.AliexpressParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
     elif platform == 'bukalapak':
-        print("Bukalapak")
+        print("Bukalapak ", filename)
         bukalapak.BukalapakParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
     elif platform == 'wish':
-        print("Wish")
+        print("Wish ", filename)
         wish.WishParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
     elif platform.find('lazada') != -1:
-        print("Lazada")
+        print("Lazada ", filename)
         lazada.LazadaParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
     elif platform == 'amazon':
-        print("Amazon")
+        print("Amazon ", filename)
         amazon.AmazonParser(['-b', '-i', input_file, '-o', output_dir, '-p', platform]).execute()
     else:
-        print("ERROR: Unrecognized Platform", platform)
+        print("ERROR: Unrecognized Platform '", platform, "'")
         return 2
     return 0
 
